@@ -31,7 +31,7 @@
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@wix/astro-wix-hosting-adapter": "^2.0.0",
-    "@wix/cli": "^1.1.135",
+    "@wix/cli": "^1.1.257",
     "@wix/sdk-types": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
