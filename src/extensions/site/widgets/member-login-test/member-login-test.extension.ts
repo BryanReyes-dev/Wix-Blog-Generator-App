@@ -11,7 +11,7 @@ export default extensions.customElement({
     defaultHeight: 180,
   },
   installation: {
-    staticContainer: "HOMEPAGE",
+    autoAdd: true,
   },
   tagName: "member-login-test",
   element: "./extensions/site/widgets/member-login-test/member-login-test.tsx",
