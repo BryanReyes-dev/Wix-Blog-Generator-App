@@ -20,7 +20,8 @@
     "@wix/design-system": "^1.154.0",
     "@wix/essentials": "^0.1.23",
     "astro": "^5.8.0",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@wix/site-members": "^1.0.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
