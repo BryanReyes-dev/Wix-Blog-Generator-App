@@ -21,11 +21,5 @@ export default extensions.customElement({
   element: "./extensions/site/widgets/member-login-test/member-login-test.tsx",
   settings: "./extensions/site/widgets/member-login-test/member-login-test.panel.tsx",
 
-  presets: [
-    {
-      id: "REPLACE_WITH_A_NEW_UUID",
-      name: "Member Login Test",
-      thumbnailUrl: "{{BASE_URL}}/public/member-login-test.png",
-    },
-  ],
+  
 });
