@@ -14,8 +14,11 @@ export default extensions.customElement({
   },
 
   installation: {
-    staticContainer: "HOMEPAGE",
-  },
+  // Wix documents staticContainer, but the v2 TypeScript definitions
+  // still expose the deprecated autoAdd property.
+  // @ts-expect-error Documented Wix configuration not yet reflected in v2 types.
+  staticContainer: "HOMEPAGE",
+},
 
   tagName: "member-login-test",
   element: "./extensions/site/widgets/member-login-test/member-login-test.tsx",

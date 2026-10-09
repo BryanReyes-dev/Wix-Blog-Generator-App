@@ -15,22 +15,22 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@wix/astro": "^2.39.0",
+    "@wix/astro": "^2.75.2",
     "@wix/dashboard": "^1.3.43",
     "@wix/design-system": "^1.154.0",
     "@wix/essentials": "^0.1.23",
     "@wix/site-members": "^1.0.0",
-    "astro": "^5.8.0",
+    "astro": "^5.18.2",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@astrojs/react": "^4.3.0",
+    "@astrojs/react": "^4.4.2",
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
-    "@wix/astro-wix-hosting-adapter": "^2.0.0",
+    "@wix/astro-wix-hosting-adapter": "^2.0.4",
     "@wix/cli": "^1.1.257",
     "@wix/sdk-types": "^1.0.0",
     "react": "^18.3.1",
