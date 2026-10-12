@@ -1,4 +1,5 @@
 import { authentication, currentMember } from "@wix/site-members";
+import { httpClient } from "@wix/essentials";
 import styles from "./member-login-test.module.css";
 
 class MemberLoginTest extends HTMLElement {
@@ -8,7 +9,7 @@ class MemberLoginTest extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // No long-lived listeners or timers to clean up in this test widget.
+    // No long-lived listeners or timers to clean up in this widget.
   }
 
   private render() {
@@ -45,20 +46,40 @@ class MemberLoginTest extends HTMLElement {
       return;
     }
 
-    try {
-      const member = await currentMember.getMember();
+    let member: Awaited<ReturnType<typeof currentMember.getMember>> | null = null;
 
-      if (member) {
-        status.textContent = "Signed in. Member session is active.";
-        button.textContent = "Sign out";
-      } else {
-        status.textContent = "Not signed in.";
-        button.textContent = "Sign in";
-      }
+    try {
+      member = await currentMember.getMember();
     } catch {
-      // Auth APIs can be unavailable while editing/previewing. The live site is the real test.
+      status.textContent = "Member sign-in is unavailable in this preview. Try the published development site.";
+      button.textContent = "Sign in";
+      return;
+    }
+
+    if (!member) {
       status.textContent = "Not signed in.";
       button.textContent = "Sign in";
+      return;
+    }
+
+    button.textContent = "Sign out";
+    status.textContent = "Signed in. Checking workflow access…";
+
+    try {
+      const baseApiUrl = new URL(import.meta.url).origin;
+      const response = await httpClient.fetchWithAuth(baseApiUrl + "/api/workflow-access");
+
+      if (!response.ok) {
+        status.textContent = "Signed in, but workflow access could not be verified. Try again later.";
+        return;
+      }
+
+      const result = await response.json() as { authorized?: boolean };
+      status.textContent = result.authorized
+        ? "Signed in. Workflow access approved."
+        : "Signed in, but access has not been granted. Contact the site team.";
+    } catch {
+      status.textContent = "Signed in, but workflow access could not be verified. Try again later.";
     }
   }
 
