@@ -38,15 +38,6 @@ type MembersResult = {
   _totalCount?: number;
 };
 
-async function resolveQueryResult(value: unknown): Promise<unknown> {
-  if (value && typeof value === 'object' &&
-      'find' in value && typeof (value as { find?: unknown }).find === 'function') {
-    return await (value as { find: () => Promise<unknown> }).find();
-  }
-
-  return value;
-}
-
 function displayName(member: WixMember, memberId: string): string {
   const contactName = [member.contact?.firstName, member.contact?.lastName]
     .filter(Boolean)
@@ -77,12 +68,11 @@ export const GET: APIRoute = async ({ url }) => {
     let result: unknown;
 
     if (search) {
-      // queryMembers is a query-builder function exported directly by @wix/members.
-      // Keep query options in the builder argument and execute the returned query.
+      // The SDK query builder accepts fieldsets/search as options; paging is applied
+      // to the builder using limit() and skip(), then retrieved with find().
       const queryMembers = auth.elevate(wixMembers.queryMembers);
-      const queryResult = queryMembers({
+      result = await queryMembers({
         fieldsets: ['EXTENDED'],
-        paging: { limit, offset },
         search: {
           expression: search,
           fields: [
@@ -92,8 +82,7 @@ export const GET: APIRoute = async ({ url }) => {
             'profile.nickname',
           ],
         },
-      });
-      result = await resolveQueryResult(queryResult);
+      }).limit(limit).skip(offset).find();
     } else {
       const listMembers = auth.elevate(wixMembers.listMembers);
       result = await listMembers({
