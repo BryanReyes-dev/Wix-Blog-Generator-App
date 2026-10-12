@@ -145,6 +145,11 @@ const DashboardPage: FC = () => {
   const pageDescription = totalMembers === null
     ? 'Page ' + pageNumber
     : 'Page ' + pageNumber + ' of ' + Math.max(1, Math.ceil(totalMembers / PAGE_SIZE));
+  const setupPending = creditsLoading || membersLoading;
+  const setupReady = !setupPending && !creditsError && !membersError && accessStorageAvailable;
+  const setupStatusLabel = setupPending
+    ? 'Checking permissions'
+    : setupReady ? 'Connected' : 'Action needed';
 
   return (
     <WixDesignSystemProvider>
@@ -161,6 +166,69 @@ const DashboardPage: FC = () => {
               <p className={styles.introCopy}>
                 Use the live Wix member directory to approve access. Credit balance is fetched from Wix
                 when this dashboard opens; blog creation and publishing remain separate future work.
+              </p>
+            </section>
+
+            <section className={styles.setupPanel} aria-labelledby="setup-heading">
+              <div className={styles.setupHeader}>
+                <div>
+                  <p className={styles.eyebrow}>QUICK SETUP</p>
+                  <h3 id="setup-heading" className={styles.panelTitle}>Setup and permission status</h3>
+                  <p className={styles.panelCopy}>
+                    Check the access this dashboard needs. Rechecking does not grant permissions; Wix controls approval during installation or an app update.
+                  </p>
+                </div>
+                <button
+                  className={styles.secondaryButton}
+                  type="button"
+                  onClick={() => {
+                    void loadCredits();
+                    void loadMembers(0, activeSearch);
+                  }}
+                  disabled={setupPending}
+                >
+                  {setupPending ? 'Checking…' : 'Recheck access'}
+                </button>
+              </div>
+
+              <p className={styles.setupOverall} role="status" aria-live="polite">
+                <span className={styles.statusDot + ' ' + (setupPending ? styles.statusPending : setupReady ? styles.statusReady : styles.statusPending)} aria-hidden="true" />
+                <strong>{setupStatusLabel}</strong>
+                {setupReady
+                  ? ' — member lookup, credit balance, and workflow approval storage are available.'
+                  : setupPending
+                    ? ' — checking access with Wix.'
+                    : ' — review the checks below and resolve any blocked permissions or storage setup.'}
+              </p>
+
+              <div className={styles.setupGrid}>
+                <article className={styles.setupItem}>
+                  <span className={styles.statusDot + ' ' + (membersLoading ? styles.statusPending : membersError ? styles.statusPending : styles.statusReady)} aria-hidden="true" />
+                  <div>
+                    <strong>Site member directory</strong>
+                    <p>{membersLoading ? 'Checking Read Members access…' : membersError ? 'Wix member access failed. Check the error in the member directory below.' : 'Connected — member lookup is working.'}</p>
+                  </div>
+                </article>
+
+                <article className={styles.setupItem}>
+                  <span className={styles.statusDot + ' ' + (creditsLoading ? styles.statusPending : creditsError ? styles.statusPending : styles.statusReady)} aria-hidden="true" />
+                  <div>
+                    <strong>AI credit balance</strong>
+                    <p>{creditsLoading ? 'Checking Wix AI Credits access…' : creditsError ? 'Wix AI Credits access is not available. Review the credit error below.' : 'Connected — the live credit balance is available.'}</p>
+                  </div>
+                </article>
+
+                <article className={styles.setupItem}>
+                  <span className={styles.statusDot + ' ' + (setupPending && !accessStorageAvailable ? styles.statusPending : accessStorageAvailable ? styles.statusReady : styles.statusPending)} aria-hidden="true" />
+                  <div>
+                    <strong>Workflow approval storage</strong>
+                    <p>{membersLoading ? 'Checking the app-owned data collection…' : accessStorageAvailable ? 'Connected — approval records can be read.' : 'Unavailable — confirm the app-owned collection has been provisioned on this site.'}</p>
+                  </div>
+                </article>
+              </div>
+
+              <p className={styles.setupNote}>
+                Permission scopes are configured by the app developer, not added by a collaborator inside this screen. Wix asks the site owner to approve requested permissions during installation; for an already-installed released app, the owner may need to update it and approve the new permissions. Development-site changes can take a few minutes to take effect. The current Wix API documentation associates AI credit-balance access with the broader Manage SEO Settings scope; that scope has not been enabled because it grants more access than a credit-balance read needs.
               </p>
             </section>
 

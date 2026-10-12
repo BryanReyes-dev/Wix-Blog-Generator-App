@@ -23,6 +23,13 @@ export default extensions.customElement({
   tagName: "member-login-test",
   element: "./extensions/site/widgets/member-login-test/member-login-test.tsx",
   settings: "./extensions/site/widgets/member-login-test/member-login-test.panel.tsx",
+  presets: [
+  {
+    id: "4a7e3f12-9c6b-4d81-a250-8e3b6f9c1d74",
+    name: "Member Login Test",
+    thumbnailUrl: "{{BASE_URL}}/public/thumbnail.png",
+  },
+],
 
   
 });
