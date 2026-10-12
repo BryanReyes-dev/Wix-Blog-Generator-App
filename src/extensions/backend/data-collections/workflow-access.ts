@@ -14,7 +14,7 @@ export default {
     itemRead: 'CMS_EDITOR',
     itemRemove: 'CMS_EDITOR',
     itemUpdate: 'CMS_EDITOR',
-  },
+  } as const,
   indexes: [],
   initialData: [],
 };

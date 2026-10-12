@@ -39,7 +39,6 @@ type MembersResult = {
 };
 
 async function resolveQueryResult(value: unknown): Promise<unknown> {
-  // Some Wix SDK query builders expose find(); handle that and direct responses.
   if (value && typeof value === 'object' &&
       'find' in value && typeof (value as { find?: unknown }).find === 'function') {
     return await (value as { find: () => Promise<unknown> }).find();
@@ -78,11 +77,12 @@ export const GET: APIRoute = async ({ url }) => {
     let result: unknown;
 
     if (search) {
-      // Use the underlying SDK function so the request itself, not just a
-      // query-builder factory, is elevated to the app identity.
-      const queryMembers = auth.elevate(wixMembers.members.queryMembers);
-      const queryResult = await queryMembers({
+      // queryMembers is a query-builder function exported directly by @wix/members.
+      // Keep query options in the builder argument and execute the returned query.
+      const queryMembers = auth.elevate(wixMembers.queryMembers);
+      const queryResult = queryMembers({
         fieldsets: ['EXTENDED'],
+        paging: { limit, offset },
         search: {
           expression: search,
           fields: [
@@ -92,7 +92,6 @@ export const GET: APIRoute = async ({ url }) => {
             'profile.nickname',
           ],
         },
-        paging: { limit, offset },
       });
       result = await resolveQueryResult(queryResult);
     } else {
@@ -123,7 +122,6 @@ export const GET: APIRoute = async ({ url }) => {
       try {
         approved = await isMemberApproved(memberId);
       } catch {
-        // Keep showing the live directory, but never imply access is known.
         accessStorageAvailable = false;
       }
 

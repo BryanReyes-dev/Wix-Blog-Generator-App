@@ -14,12 +14,12 @@ export class ApiError extends Error {
   }
 }
 
-type TokenInfo = Awaited<ReturnType<typeof auth.getTokenInfo>>;
-
-async function getActiveToken(): Promise<TokenInfo> {
-  let token: TokenInfo;
+async function getActiveToken() {
+  let token;
 
   try {
+    // Avoid a manually inferred TokenInfo alias here: the installed SDK's
+    // ReturnType metadata can resolve to the method's callable type.
     token = await auth.getTokenInfo();
   } catch {
     throw new ApiError(401, 'Sign in through Wix before continuing.');
@@ -123,7 +123,6 @@ export function handleApiError(error: unknown): Response {
     return jsonResponse({ error: error.message }, error.status);
   }
 
-  // Keep internal details in server logs instead of exposing stacks/API errors.
   console.error('[AI Blog Generator API] Request failed.', error);
   return jsonResponse(
     { error: 'The request could not be completed. Check app permissions and site setup.' },
