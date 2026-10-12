@@ -72,6 +72,13 @@
   justify-content: space-between;
   gap: 20px;
 }
+.setupActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 .setupOverall {
   display: flex;
   align-items: center;
@@ -139,6 +146,16 @@
 .secondaryButton { border: 1px solid #d0d5dd; background: #fff; color: #344054; }
 .primaryButton { border: 1px solid #3156a6; background: #3156a6; color: #fff; }
 .revokeButton { border: 1px solid #f0c6c6; background: #fff; color: #a12d2d; }
+.buttonLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.buttonLink:focus-visible {
+  outline: 2px solid #3156a6;
+  outline-offset: 2px;
+}
 .secondaryButton:disabled, .primaryButton:disabled, .revokeButton:disabled {
   opacity: 0.55;
   cursor: not-allowed;
