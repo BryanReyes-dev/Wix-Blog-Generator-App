@@ -228,7 +228,7 @@ const DashboardPage: FC = () => {
               </div>
 
               <p className={styles.setupNote}>
-                Permission scopes are configured by the app developer, not added by a collaborator inside this screen. Wix asks the site owner to approve requested permissions during installation; for an already-installed released app, the owner may need to update it and approve the new permissions. Development-site changes can take a few minutes to take effect. The current Wix API documentation associates AI credit-balance access with the broader Manage SEO Settings scope; that scope has not been enabled because it grants more access than a credit-balance read needs.
+                Permission scopes are configured by the app developer, not added by a collaborator inside this screen. Wix asks the site owner to approve requested permissions during installation; for an already-installed released app, the owner may need to update it and approve the new permissions. Development-site changes can take a few minutes to take effect. Wix documents AI credit-balance access under the broader Manage SEO Settings scope, which is enabled for this app. The AI model itself will not inherit these app permissions; its capabilities will be limited to the specific server-side actions we expose to it.
               </p>
             </section>
 
