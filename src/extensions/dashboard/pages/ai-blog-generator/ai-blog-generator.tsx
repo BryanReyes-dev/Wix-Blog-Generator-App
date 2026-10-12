@@ -4,6 +4,8 @@ import { Page, WixDesignSystemProvider } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
 import styles from './ai-blog-generator.module.css';
 
+const APP_ID = '012509d2-64ed-4670-bc27-8299e942673f';
+const APP_INSTALLER_URL = `https://wix.com/app-installer?appId=${APP_ID}`;
 const API_BASE_URL = new URL(import.meta.url).origin;
 const PAGE_SIZE = 20;
 
@@ -178,17 +180,28 @@ const DashboardPage: FC = () => {
                     Check the access this dashboard needs. Rechecking does not grant permissions; Wix controls approval during installation or an app update.
                   </p>
                 </div>
-                <button
-                  className={styles.secondaryButton}
-                  type="button"
-                  onClick={() => {
-                    void loadCredits();
-                    void loadMembers(0, activeSearch);
-                  }}
-                  disabled={setupPending}
-                >
-                  {setupPending ? 'Checking…' : 'Recheck access'}
-                </button>
+                <div className={styles.setupActions}>
+                  <a
+                    className={`${styles.primaryButton} ${styles.buttonLink}`}
+                    href={APP_INSTALLER_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Open Wix to review and approve an app update"
+                  >
+                    Review permissions in Wix
+                  </a>
+                  <button
+                    className={styles.secondaryButton}
+                    type="button"
+                    onClick={() => {
+                      void loadCredits();
+                      void loadMembers(0, activeSearch);
+                    }}
+                    disabled={setupPending}
+                  >
+                    {setupPending ? 'Checking…' : 'Recheck access'}
+                  </button>
+                </div>
               </div>
 
               <p className={styles.setupOverall} role="status" aria-live="polite">
@@ -228,7 +241,7 @@ const DashboardPage: FC = () => {
               </div>
 
               <p className={styles.setupNote}>
-                Permission scopes are configured by the app developer, not added by a collaborator inside this screen. Wix asks the site owner to approve requested permissions during installation; for an already-installed released app, the owner may need to update it and approve the new permissions. Development-site changes can take a few minutes to take effect. Wix documents AI credit-balance access under the broader Manage SEO Settings scope, which is enabled for this app. The AI model itself will not inherit these app permissions; its capabilities will be limited to the specific server-side actions we expose to it.
+                Permission scopes are configured by the app developer, not granted by this screen. Use “Review permissions in Wix” to open Wix’s app-installer update flow. For an already-installed released app, adding scopes requires a major app version and the site owner must approve the update; this button cannot grant permissions by itself. On development sites, saved scopes should apply automatically after a short delay, so persistent 403 errors still need the installation’s granted permissions checked. The AI model itself does not inherit these app permissions; its capabilities will be limited to the specific server-side actions we expose to it.
               </p>
             </section>
 
