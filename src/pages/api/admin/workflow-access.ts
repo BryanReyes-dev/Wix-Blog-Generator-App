@@ -3,6 +3,7 @@ import { items } from '@wix/data';
 import { auth } from '@wix/essentials';
 import {
   handleApiError,
+  isMemberApproved,
   isWixGuid,
   jsonResponse,
   requireDashboardUser,
@@ -38,15 +39,9 @@ export const POST: APIRoute = async ({ request }) => {
         grantedBy: administrator.userId,
         grantedAt: new Date().toISOString(),
       });
-    } else {
-      const get = auth.elevate(items.get);
+    } else if (await isMemberApproved(memberId)) {
       const remove = auth.elevate(items.remove);
-      const existing = await get(WORKFLOW_ACCESS_COLLECTION_ID, memberId, { consistentRead: true });
-
-      // Revocation is idempotent: an already absent row is already revoked.
-      if (existing) {
-        await remove(WORKFLOW_ACCESS_COLLECTION_ID, memberId);
-      }
+      await remove(WORKFLOW_ACCESS_COLLECTION_ID, memberId);
     }
 
     return jsonResponse({ memberId, approved: enabled });

@@ -33,8 +33,8 @@ async function getActiveToken(): Promise<TokenInfo> {
 }
 
 /**
- * Admin routes are called from the Wix dashboard and require a Wix USER identity.
- * Site-member and visitor tokens are deliberately not accepted for these routes.
+ * Dashboard endpoints use Wix's dashboard-user identity. They must never accept
+ * a public visitor or site-member identity for elevated administration actions.
  */
 export async function requireDashboardUser() {
   const token = await getActiveToken();
@@ -51,8 +51,8 @@ export async function requireDashboardUser() {
 }
 
 /**
- * Site-widget routes must derive the member ID from Wix's signed token, never
- * from a client-supplied ID.
+ * Site-widget routes derive the member ID from Wix's signed token and never
+ * trust a member ID supplied by the browser.
  */
 export async function requireSiteMember() {
   const token = await getActiveToken();
@@ -68,15 +68,30 @@ export async function requireSiteMember() {
   };
 }
 
-export async function isMemberApproved(memberId: string): Promise<boolean> {
-  const elevatedGet = auth.elevate(items.get);
-  const record = await elevatedGet(
-    WORKFLOW_ACCESS_COLLECTION_ID,
-    memberId,
-    { consistentRead: true },
-  );
+type AccessQueryResponse = {
+  items?: unknown[];
+  dataItems?: unknown[];
+  _items?: unknown[];
+};
 
-  return Boolean(record);
+export async function isMemberApproved(memberId: string): Promise<boolean> {
+  const elevatedQuery = auth.elevate(items.query);
+  const result = await elevatedQuery(
+    WORKFLOW_ACCESS_COLLECTION_ID,
+    {
+      filter: { memberId: { $eq: memberId } },
+      paging: { limit: 1, offset: 0 },
+    },
+    { consistentRead: true },
+  ) as unknown as AccessQueryResponse;
+
+  const records = result.items ?? result.dataItems ?? result._items;
+
+  if (!Array.isArray(records)) {
+    throw new Error('Wix Data query returned an unrecognized access-record response.');
+  }
+
+  return records.length > 0;
 }
 
 /**
@@ -108,6 +123,7 @@ export function handleApiError(error: unknown): Response {
     return jsonResponse({ error: error.message }, error.status);
   }
 
+  // Keep internal details in server logs instead of exposing stacks/API errors.
   console.error('[AI Blog Generator API] Request failed.', error);
   return jsonResponse(
     { error: 'The request could not be completed. Check app permissions and site setup.' },
