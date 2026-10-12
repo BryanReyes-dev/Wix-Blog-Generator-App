@@ -20,7 +20,7 @@ Official references:
 
 The WorkflowAccess collection is defined as an app-owned Wix CMS collection, so each site that installs or updates the app has its own independent allowlist. A row's item ID is the Wix site member ID. The collection stores only the member ID and grant audit fields; it doesn't copy the member's profile or login email.
 
-The Wix site must have CMS available for the data-collections extension. Wix documents that collection extension changes are provisioned when an app version is released and the site installs or updates to that version. This branch intentionally does not run wix release or publish anything.
+The Wix site must have CMS available for the data-collections extension. Wix documents that collection extension changes are provisioned when an app version is released and the site installs or updates to that major version. This branch intentionally does not run wix release or publish anything.
 
 ## Authorization boundaries
 

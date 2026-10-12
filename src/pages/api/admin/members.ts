@@ -78,22 +78,22 @@ export const GET: APIRoute = async ({ url }) => {
     let result: unknown;
 
     if (search) {
-      const queryMembers = auth.elevate(wixMembers.queryMembers);
-      const queryResult = await queryMembers(
-        { paging: { limit, offset } },
-        {
-          fieldsets: ['EXTENDED'],
-          search: {
-            expression: search,
-            fields: [
-              'loginEmail',
-              'contact.firstName',
-              'contact.lastName',
-              'profile.nickname',
-            ],
-          },
+      // Use the underlying SDK function so the request itself, not just a
+      // query-builder factory, is elevated to the app identity.
+      const queryMembers = auth.elevate(wixMembers.members.queryMembers);
+      const queryResult = await queryMembers({
+        fieldsets: ['EXTENDED'],
+        search: {
+          expression: search,
+          fields: [
+            'loginEmail',
+            'contact.firstName',
+            'contact.lastName',
+            'profile.nickname',
+          ],
         },
-      );
+        paging: { limit, offset },
+      });
       result = await resolveQueryResult(queryResult);
     } else {
       const listMembers = auth.elevate(wixMembers.listMembers);
