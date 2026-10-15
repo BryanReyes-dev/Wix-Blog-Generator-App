@@ -14,7 +14,7 @@ export default extensions.customElement({
   },
   installation: {
     autoAdd: false,
-},
+  },
   tagName: "member-login-test",
   element: "./extensions/site/widgets/member-login-test/member-login-test.tsx",
   settings: "./extensions/site/widgets/member-login-test/member-login-test.panel.tsx",
