@@ -35,3 +35,9 @@ The Wix site must have CMS available for the data-collections extension. Wix doc
 Run npm install once to install the three added Wix SDK packages and refresh package-lock.json, then run npm run typecheck and npm run build.
 
 Finally test in wix dev against the development site after app permissions and collection provisioning are ready. A successful local build does not prove that the Wix app instance has been granted the required permissions.
+
+## Automated authentication regression tests
+
+Run `npm ci`, `npm run typecheck`, `npm test`, and `npm run build` before merging authentication changes. The Vitest suite checks missing/invalid sessions, USER-versus-MEMBER route boundaries, approved and unapproved members, approval-store failures, and access grant/revocation API responses.
+
+These tests use mocked Wix SDK calls, so they verify the server guards and route-handler responses without contacting a live Wix site. Before enabling content operations, separately verify direct HTTP requests and the login/logout/redirect flow on the published development site. A successful local or CI build is not, by itself, an authentication sign-off.

@@ -1,0 +1,90 @@
+name: Auth sign-off validation
+
+on:
+  push:
+    branches:
+      - test/auth-sign-off
+  pull_request:
+    branches:
+      - main
+      - chore/wix-astro7-upgrade
+    paths:
+      - "src/lib/server/**"
+      - "src/pages/api/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/auth-sign-off.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync-lockfile:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test/auth-sign-off'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out sign-off branch
+        uses: actions/checkout@v4
+        with:
+          ref: test/auth-sign-off
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # This job only resolves dependency metadata. It deliberately ignores all
+      # lifecycle scripts and does not run repository code with a write token.
+      - name: Synchronize package lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile only when changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already synchronized."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: sync lockfile for auth sign-off tests"
+          git push origin HEAD:test/auth-sign-off
+
+  auth-sign-off:
+    needs: sync-lockfile
+    if: always() && needs.sync-lockfile.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Static validation only; never use this placeholder for live Wix calls.
+      WIX_CLIENT_ID: "00000000-0000-4000-8000-000000000000"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          # On push events, use the branch head after lockfile sync; PR events
+          # use GitHub's synthetic merge ref to validate against the base.
+          ref: ${{ github.event_name == 'push' && 'test/auth-sign-off' || github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Type-check project
+        run: npm run typecheck
+
+      - name: Run authorization regression tests
+        run: npm test
+
+      - name: Build Wix app
+        run: npm run build
