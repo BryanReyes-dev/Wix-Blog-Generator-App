@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Static validation only; never use this placeholder for live Wix calls.
+      # The actual site auth flow is validated separately on the Wix development site.
       WIX_CLIENT_ID: "00000000-0000-4000-8000-000000000000"
     steps:
       - name: Check out source
