@@ -1,0 +1,47 @@
+name: Auth sign-off validation
+
+on:
+  push:
+    branches:
+      - test/auth-sign-off
+  pull_request:
+    branches:
+      - chore/wix-astro7-upgrade
+    paths:
+      - "src/lib/server/**"
+      - "src/pages/api/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/auth-sign-off.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  auth-sign-off:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # npm install reconciles package-lock.json with the newly added Vitest
+      # dependency in this test branch. Commit the regenerated lockfile before
+      # merging the branch so normal npm ci installs remain reproducible.
+      - name: Install dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Type-check project
+        run: npm run typecheck
+
+      - name: Run authorization regression tests
+        run: npm test
+
+      - name: Build Wix app
+        run: npm run build
