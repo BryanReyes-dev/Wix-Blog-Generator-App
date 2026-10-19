@@ -162,6 +162,16 @@ describe("server-side authentication and authorization", () => {
         message: expect.stringContaining("not been approved"),
       });
     });
+    it("allows an approved member through the reusable server-side guard", async () => {
+      setToken(makeToken("MEMBER", "approved-member"));
+      vi.mocked(items.query).mockResolvedValue({ items: [{ _id: "approved-member" }] } as never);
+
+      await expect(requireApprovedSiteMember()).resolves.toMatchObject({
+        memberId: "approved-member",
+        siteId: "site-test-id",
+      });
+    });
+
 
     it("fails closed when approval storage is unavailable", async () => {
       setToken(makeToken("MEMBER", "member-1"));
@@ -240,6 +250,26 @@ describe("server-side authentication and authorization", () => {
           memberId,
           grantedBy: "dashboard-user",
         }),
+      );
+    });
+
+    it("allows an authenticated dashboard user to revoke existing workflow access", async () => {
+      setToken(makeToken("USER", "dashboard-user"));
+      vi.mocked(items.query).mockResolvedValue({ items: [{ _id: "550e8400-e29b-41d4-a716-446655440000" }] } as never);
+      vi.mocked(items.remove).mockResolvedValue({} as never);
+
+      const memberId = "550e8400-e29b-41d4-a716-446655440000";
+      const response = await postAdminWorkflowAccess({
+        request: {
+          json: vi.fn().mockResolvedValue({ memberId, enabled: false }),
+        },
+      } as never);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ memberId, approved: false });
+      expect(items.remove).toHaveBeenCalledWith(
+        "@bg478806/blog-generator/WorkflowAccess",
+        memberId,
       );
     });
 
