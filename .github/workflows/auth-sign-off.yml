@@ -20,15 +20,56 @@ permissions:
   contents: read
 
 jobs:
-  auth-sign-off:
+  sync-lockfile:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/test/auth-sign-off'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out sign-off branch
+        uses: actions/checkout@v4
+        with:
+          ref: test/auth-sign-off
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # This job only resolves dependency metadata. It deliberately ignores all
+      # lifecycle scripts and does not run repository code with a write token.
+      - name: Synchronize package lock
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Commit lockfile only when changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already synchronized."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: sync lockfile for auth sign-off tests"
+          git push origin HEAD:test/auth-sign-off
+
+  auth-sign-off:
+    needs: sync-lockfile
+    if: always() && needs.sync-lockfile.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       # Static validation only; never use this placeholder for live Wix calls.
-      # The actual site auth flow is validated separately on the Wix development site.
       WIX_CLIENT_ID: "00000000-0000-4000-8000-000000000000"
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          # On push events, use the branch head after lockfile sync; PR events
+          # use GitHub's synthetic merge ref to validate against the base.
+          ref: ${{ github.event_name == 'push' && 'test/auth-sign-off' || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -36,19 +77,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      # npm install reconciles package-lock.json with the new Vitest dependency
-      # for this validation run. Commit the regenerated lockfile before merging
-      # so normal npm ci installs remain reproducible.
       - name: Install dependencies
-        run: npm install --ignore-scripts --no-audit --no-fund
-
-      - name: Upload regenerated lockfile for review
-        uses: actions/upload-artifact@v4
-        with:
-          name: regenerated-package-lock
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 1
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Type-check project
         run: npm run typecheck
