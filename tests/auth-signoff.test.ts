@@ -53,7 +53,8 @@ function makeToken(
 }
 
 function setToken(token: ReturnType<typeof makeToken>) {
-  vi.mocked(auth.getTokenInfo).mockResolvedValue(token);
+  // The installed Wix SDK declaration models this resolved token as a callable; the server guard uses the runtime token object.
+  vi.mocked(auth.getTokenInfo).mockResolvedValue(token as never);
 }
 
 function adminMembersContext() {
