@@ -3,7 +3,6 @@ import { auth } from "@wix/essentials";
 import { items } from "@wix/data";
 import { members } from "@wix/members";
 import {
-  ApiError,
   isMemberApproved,
   requireApprovedSiteMember,
   requireDashboardUser,

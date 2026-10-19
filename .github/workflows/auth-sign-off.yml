@@ -21,6 +21,9 @@ permissions:
 jobs:
   auth-sign-off:
     runs-on: ubuntu-latest
+    env:
+      # Static validation only; never use this placeholder for live Wix calls.
+      WIX_CLIENT_ID: "00000000-0000-4000-8000-000000000000"
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -31,9 +34,9 @@ jobs:
           node-version: 24
           cache: npm
 
-      # npm install reconciles package-lock.json with the newly added Vitest
-      # dependency in this test branch. Commit the regenerated lockfile before
-      # merging the branch so normal npm ci installs remain reproducible.
+      # npm install reconciles package-lock.json with the new Vitest dependency
+      # for this validation run. Commit the regenerated lockfile before merging
+      # so normal npm ci installs remain reproducible.
       - name: Install dependencies
         run: npm install --ignore-scripts --no-audit --no-fund
 
