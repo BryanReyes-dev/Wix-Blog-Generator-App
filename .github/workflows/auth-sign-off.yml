@@ -1,8 +1,12 @@
 name: Auth sign-off validation
 
 on:
+  push:
+    branches:
+      - test/auth-sign-off
   pull_request:
     branches:
+      - main
       - chore/wix-astro7-upgrade
     paths:
       - "src/lib/server/**"
