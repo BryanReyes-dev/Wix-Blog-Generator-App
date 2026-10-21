@@ -1,35 +1,21 @@
 import { items } from '@wix/data';
 import { auth } from '@wix/essentials';
+import {
+  ApiError,
+  getActiveWixToken,
+  requireApprovedMember,
+  requirePrivilegedDashboardUser,
+  requireWixSubject,
+  type AuthenticatedIdentity,
+  type AuthenticatedMember,
+  type WixTokenInfo,
+} from './authorization-core';
 
 export const WORKFLOW_ACCESS_COLLECTION_ID =
   '@bg478806/blog-generator/WorkflowAccess';
 
-export class ApiError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
 async function getActiveToken() {
-  let token;
-
-  try {
-    // Avoid a manually inferred TokenInfo alias here: the installed SDK's
-    // ReturnType metadata can resolve to the method's callable type.
-    token = await auth.getTokenInfo();
-  } catch {
-    throw new ApiError(401, 'Sign in through Wix before continuing.');
-  }
-
-  if (!token.active || !token.siteId || !token.subjectId) {
-    throw new ApiError(401, 'A valid Wix session is required.');
-  }
-
-  return token;
+  return getActiveWixToken(auth.getTokenInfo as () => Promise<WixTokenInfo>);
 }
 
 /**
@@ -38,16 +24,7 @@ async function getActiveToken() {
  */
 export async function requireDashboardUser() {
   const token = await getActiveToken();
-
-  if (token.subjectType !== 'USER') {
-    throw new ApiError(403, 'A Wix dashboard user session is required.');
-  }
-
-  return {
-    userId: token.subjectId,
-    siteId: token.siteId,
-    instanceId: token.instanceId ?? null,
-  };
+  return requireWixSubject(token, 'USER') satisfies AuthenticatedIdentity;
 }
 
 /**
@@ -56,16 +33,25 @@ export async function requireDashboardUser() {
  */
 export async function requireSiteMember() {
   const token = await getActiveToken();
+  return requireWixSubject(token, 'MEMBER') satisfies AuthenticatedMember;
+}
 
-  if (token.subjectType !== 'MEMBER') {
-    throw new ApiError(403, 'Sign in as a site member to check workflow access.');
-  }
+/**
+ * Confirms a dashboard caller has Wix's privileged site access by making a
+ * non-elevated read against the approval collection, whose read permission is
+ * PRIVILEGED. Wix evaluates the current dashboard user's role for this call.
+ */
+export async function requireWorkflowAdministrator() {
+  const token = await getActiveToken();
 
-  return {
-    memberId: token.subjectId,
-    siteId: token.siteId,
-    instanceId: token.instanceId ?? null,
-  };
+  return requirePrivilegedDashboardUser(token, async () => {
+    await items.query(
+      WORKFLOW_ACCESS_COLLECTION_ID,
+      { paging: { limit: 1, offset: 0 } },
+      { consistentRead: true },
+    );
+    return true;
+  });
 }
 
 type AccessQueryResponse = {
@@ -99,13 +85,8 @@ export async function isMemberApproved(memberId: string): Promise<boolean> {
  * creates or changes drafts. Authentication alone is not authorization.
  */
 export async function requireApprovedSiteMember() {
-  const member = await requireSiteMember();
-
-  if (!(await isMemberApproved(member.memberId))) {
-    throw new ApiError(403, 'This site member has not been approved for the blog workflow.');
-  }
-
-  return member;
+  const token = await getActiveToken();
+  return requireApprovedMember(token, isMemberApproved);
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {

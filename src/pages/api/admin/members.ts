@@ -1,11 +1,10 @@
 import type { APIRoute } from 'astro';
-import { auth } from '@wix/essentials';
 import { members as wixMembers } from '@wix/members';
 import {
   handleApiError,
   isMemberApproved,
   jsonResponse,
-  requireDashboardUser,
+  requireWorkflowAdministrator,
 } from '../../../lib/server/access-control';
 
 type WixMember = {
@@ -53,7 +52,7 @@ function displayName(member: WixMember, memberId: string): string {
 
 export const GET: APIRoute = async ({ url }) => {
   try {
-    await requireDashboardUser();
+    await requireWorkflowAdministrator();
 
     const requestedLimit = Number(url.searchParams.get('limit') ?? 20);
     const requestedOffset = Number(url.searchParams.get('offset') ?? 0);
@@ -68,10 +67,9 @@ export const GET: APIRoute = async ({ url }) => {
     let result: unknown;
 
     if (search) {
-      // The SDK query builder accepts fieldsets/search as options; paging is applied
-      // to the builder using limit() and skip(), then retrieved with find().
-      const queryMembers = auth.elevate(wixMembers.queryMembers);
-      result = await queryMembers({
+      // Keep the dashboard user's Wix role in force for this administrative
+      // directory read; elevation would replace it with the app's permissions.
+      result = await wixMembers.queryMembers({
         fieldsets: ['EXTENDED'],
         search: {
           expression: search,
@@ -84,8 +82,7 @@ export const GET: APIRoute = async ({ url }) => {
         },
       }).limit(limit).skip(offset).find();
     } else {
-      const listMembers = auth.elevate(wixMembers.listMembers);
-      result = await listMembers({
+      result = await wixMembers.listMembers({
         paging: { limit, offset },
         fieldsets: ['EXTENDED'],
       });

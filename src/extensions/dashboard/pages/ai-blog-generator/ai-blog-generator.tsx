@@ -158,7 +158,7 @@ const DashboardPage: FC = () => {
       <Page>
         <Page.Header
           title="AI Blog Generator"
-          subtitle="Manage site access, available Wix AI credits, and the publishing workflow."
+          subtitle="Manage site access, review Wix AI credits, and check member draft workflow setup."
         />
         <Page.Content>
           <main className={styles.dashboard} aria-label="AI Blog Generator dashboard">
@@ -167,7 +167,8 @@ const DashboardPage: FC = () => {
               <h2 className={styles.headline}>A controlled workflow for every blog.</h2>
               <p className={styles.introCopy}>
                 Use the live Wix member directory to approve access. Credit balance is fetched from Wix
-                when this dashboard opens; blog creation and publishing remain separate future work.
+                when this dashboard opens. Approved members use the protected site workflow to generate,
+                review, and explicitly save unpublished Wix Blog drafts.
               </p>
             </section>
 
@@ -273,11 +274,11 @@ const DashboardPage: FC = () => {
               <article className={styles.statusCard}>
                 <div className={styles.cardTopline}>
                   <span className={styles.statusDot + ' ' + styles.statusPending} aria-hidden="true" />
-                  <span className={styles.statusLabel}>Not connected</span>
+                  <span className={styles.statusLabel}>Checked before saving</span>
                 </div>
-                <h3 className={styles.cardTitle}>Wix Blog API</h3>
+                <h3 className={styles.cardTitle}>Wix Blog drafts</h3>
                 <p className={styles.cardCopy}>
-                  Draft creation, editing, scheduling, and publishing will be added after access control and credit behavior are verified.
+                  The member workflow verifies Wix Blog before draft creation. Members review and edit generated content first; publishing is not available.
                 </p>
               </article>
             </section>
@@ -500,7 +501,7 @@ const DashboardPage: FC = () => {
 
             <p className={styles.footerNote}>
               Approval is stored per Wix site installation. Site-member routes validate the signed-in member on the server.
-              Blog creation and publishing are not implemented by this change.
+              Blog articles are saved as unpublished drafts only after an explicit member action.
             </p>
           </main>
         </Page.Content>
