@@ -18,7 +18,7 @@ export default defineConfig({
         // widget calls this Vite/Astro server. Keep local origins and allow
         // only this development site's origin; do not enable CORS globally.
         origin: [
-          /^https?:\\/\\/(?:(?:[^:]+\\.)?localhost|127\\.0\\.0\\.1|\\[::1\\])(?::\\d+)?$/,
+          /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/,
           'https://dev-sitex1487338744.wixdev-sites.org',
         ],
       },
