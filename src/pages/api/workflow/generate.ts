@@ -8,8 +8,7 @@ import { InputValidationError, parseBlogBrief, parseGeneratedArticle } from '../
 import { AiProviderError, generateBlogArticle } from '../../../lib/server/generate-blog-article';
 
 type ServerEnvironment = ImportMetaEnv & {
-  OPENAI_API_KEY?: string;
-  OPENAI_MODEL?: string;
+  WIX_AI_MODEL?: string;
 };
 
 export const POST: APIRoute = async ({ request }) => {
@@ -30,15 +29,14 @@ export const POST: APIRoute = async ({ request }) => {
     const brief = parseBlogBrief(body);
     const environment = import.meta.env as ServerEnvironment;
     const generated = await generateBlogArticle(brief, {
-      apiKey: environment.OPENAI_API_KEY,
-      model: environment.OPENAI_MODEL?.trim() || 'gpt-5.4-mini',
+      model: environment.WIX_AI_MODEL?.trim() || 'gpt-5-mini',
     });
 
     let article;
     try {
       article = parseGeneratedArticle(generated);
     } catch {
-      throw new AiProviderError('The AI provider returned article data that did not pass validation. Please try again.');
+      throw new AiProviderError('Wix AI returned article data that did not pass validation. Please try again.');
     }
 
     return jsonResponse({ article });
