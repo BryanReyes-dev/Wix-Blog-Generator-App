@@ -10,7 +10,11 @@ import {
   requireWorkflowAdministrator,
 } from '../../../lib/server/access-control';
 
-const WIX_BLOG_APP_ID = '14bcded7-0066-7c35-14d7-466cb3f09103';
+import {
+  isWixBlogInstalled,
+  WIX_BLOG_APP_ID,
+  WIX_BLOG_APP_SLUG,
+} from '../../../lib/server/wix-blog-installation';
 
 export const GET: APIRoute = async () => {
   try {
@@ -32,18 +36,18 @@ export const GET: APIRoute = async () => {
       );
     }
 
-    const installedAppIds = installedApps.filter(
-      (appId): appId is string => typeof appId === 'string',
+    const installedAppIdentifiers = installedApps.filter(
+      (appIdentifier): appIdentifier is string => typeof appIdentifier === 'string',
     );
-    const normalizedInstalledAppIds = installedAppIds.map((appId) => appId.trim().toLowerCase());
-    const installed = normalizedInstalledAppIds.includes(WIX_BLOG_APP_ID.toLowerCase());
+    const installed = isWixBlogInstalled(installedAppIdentifiers);
 
     console.info('[blog-status-check] Wix Blog inventory diagnostic:', {
       siteId: appInstance.site?.siteId,
       instanceId: appInstance.instance?.instanceId,
       expectedBlogAppId: WIX_BLOG_APP_ID,
+      expectedBlogAppSlug: WIX_BLOG_APP_SLUG,
       installed,
-      installedWixApps: installedAppIds,
+      installedWixApps: installedAppIdentifiers,
     });
 
     return jsonResponse({
@@ -52,7 +56,8 @@ export const GET: APIRoute = async () => {
       siteId: appInstance.site?.siteId ?? null,
       instanceId: appInstance.instance?.instanceId ?? null,
       expectedBlogAppId: WIX_BLOG_APP_ID,
-      installedApps: installedAppIds,
+      expectedBlogAppSlug: WIX_BLOG_APP_SLUG,
+      installedApps: installedAppIdentifiers,
     });
   } catch (error) {
     return handleApiError(error);
