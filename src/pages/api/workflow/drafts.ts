@@ -118,6 +118,9 @@ export const POST: APIRoute = async ({ request }) => {
           const errorRecord = error && typeof error === 'object'
             ? error as Record<string, unknown>
             : null;
+          const detailsRecord = errorRecord?.details && typeof errorRecord.details === 'object'
+            ? errorRecord.details as Record<string, unknown>
+            : null;
           const cause = errorRecord?.cause && typeof errorRecord.cause === 'object'
             ? errorRecord.cause as Record<string, unknown>
             : null;
@@ -129,11 +132,7 @@ export const POST: APIRoute = async ({ request }) => {
             message: error instanceof Error ? error.message : String(error),
             code: errorRecord?.code ?? errorRecord?.errorCode ?? null,
             statusCode: errorRecord?.statusCode ?? errorRecord?.status ?? null,
-            requestId: errorRecord?.requestId ?? errorRecord?.details && (
-              typeof errorRecord.details === 'object'
-                ? (errorRecord.details as Record<string, unknown>).requestId
-                : null
-            ) ?? null,
+            requestId: errorRecord?.requestId ?? detailsRecord?.requestId ?? null,
             details: errorRecord?.details ?? null,
             cause: cause
               ? {
