@@ -171,44 +171,65 @@ test('same member submission ID shares an in-flight or successful draft result',
   assert.equal(calls, 2);
 });
 
-test('OpenAI Responses generation uses strict structured output and validates provider failures', async () => {
-  let requestUrl = '';
-  let requestBody = null;
-  const fakeFetch = async (url, options) => {
-    requestUrl = url;
-    requestBody = JSON.parse(options.body);
-    return new Response(JSON.stringify({
-      output: [{
-        type: 'message',
-        content: [{ type: 'output_text', text: JSON.stringify(validArticle()) }],
-      }],
-    }), { status: 200 });
-  };
-
+test('Wix AI generation uses the managed provider and parses the article JSON', async () => {
+  let callArgs = null;
   const result = await generateBlogArticle(
     { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [] },
-    { apiKey: 'test-key', model: 'gpt-5.4-mini', fetcher: fakeFetch },
+    {
+      model: 'gpt-5-mini',
+      generateText: async (args) => {
+        callArgs = args;
+        return { text: JSON.stringify(validArticle()) };
+      },
+    },
   );
 
-  assert.equal(requestUrl, 'https://api.openai.com/v1/responses');
-  assert.equal(requestBody.model, 'gpt-5.4-mini');
-  assert.equal(requestBody.text.format.type, 'json_schema');
-  assert.equal(requestBody.text.format.strict, true);
+  assert.equal(typeof callArgs.system, 'string');
+  assert.match(callArgs.system, /valid JSON/);
+  assert.equal(callArgs.prompt, JSON.stringify({
+    topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
+  }));
+  assert.equal(callArgs.maxOutputTokens, 3500);
   assert.deepEqual(result, validArticle());
+});
+
+test('Wix AI generation rejects empty model configuration and malformed output', async () => {
+  const brief = {
+    topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
+  };
 
   await assert.rejects(
-    generateBlogArticle(
-      { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [] },
-      { apiKey: '', model: 'gpt-5.4-mini', fetcher: fakeFetch },
-    ),
+    generateBlogArticle(brief, { model: '  ' }),
     (error) => error instanceof AiProviderError && error.status === 503,
   );
 
   await assert.rejects(
-    generateBlogArticle(
-      { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [] },
-      { apiKey: 'test-key', model: 'gpt-5.4-mini', fetcher: async () => new Response('{', { status: 200 }) },
-    ),
+    generateBlogArticle(brief, {
+      model: 'gpt-5-mini',
+      generateText: async () => ({ text: 'not JSON' }),
+    }),
     (error) => error instanceof AiProviderError && error.status === 502,
+  );
+});
+
+test('Wix AI generation maps provider timeouts and permission failures to safe API errors', async () => {
+  const brief = {
+    topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
+  };
+
+  await assert.rejects(
+    generateBlogArticle(brief, {
+      model: 'gpt-5-mini',
+      generateText: async () => { const error = new Error('timeout'); error.name = 'TimeoutError'; throw error; },
+    }),
+    (error) => error instanceof AiProviderError && error.status === 504,
+  );
+
+  await assert.rejects(
+    generateBlogArticle(brief, {
+      model: 'gpt-5-mini',
+      generateText: async () => { throw new Error('permission denied'); },
+    }),
+    (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
 });
