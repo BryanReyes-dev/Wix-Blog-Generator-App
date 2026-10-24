@@ -17,6 +17,7 @@ import {
 } from '../src/lib/server/blog-content.ts';
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
+import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -32,6 +33,14 @@ const userToken = (overrides = {}) => ({
   subjectId: 'dashboard-user-id',
   siteId: 'site-id',
   ...overrides,
+});
+
+test('Wix Blog installation detection accepts the installed-app slug and catalog ID', () => {
+  assert.equal(isWixBlogInstalled(['members_about', 'blog', 'members_area']), true);
+  assert.equal(isWixBlogInstalled(['14bcded7-0066-7c35-14d7-466cb3f09103']), true);
+  assert.equal(isWixBlogInstalled([' BLOG ']), true);
+  assert.equal(isWixBlogInstalled(['members_area', 'members_about']), false);
+  assert.equal(isWixBlogInstalled(undefined), false);
 });
 
 const validArticle = () => ({
