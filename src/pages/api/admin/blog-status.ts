@@ -21,15 +21,38 @@ export const GET: APIRoute = async () => {
     const installedApps = appInstance.site?.installedWixApps;
 
     if (!Array.isArray(installedApps)) {
+      console.error('[blog-status-check] Wix did not return installedWixApps:', {
+        siteId: appInstance.site?.siteId,
+        instanceId: appInstance.instance?.instanceId,
+        installedWixAppsType: typeof installedApps,
+      });
       throw new ApiError(
         503,
-        'Wix could not verify the installed-app list for this site. Check the app-instance permissions and server logs.',
+        'Wix could not verify the installed-app list for this site. Check the server logs.',
       );
     }
 
+    const installedAppIds = installedApps.filter(
+      (appId): appId is string => typeof appId === 'string',
+    );
+    const normalizedInstalledAppIds = installedAppIds.map((appId) => appId.trim().toLowerCase());
+    const installed = normalizedInstalledAppIds.includes(WIX_BLOG_APP_ID.toLowerCase());
+
+    console.info('[blog-status-check] Wix Blog inventory diagnostic:', {
+      siteId: appInstance.site?.siteId,
+      instanceId: appInstance.instance?.instanceId,
+      expectedBlogAppId: WIX_BLOG_APP_ID,
+      installed,
+      installedWixApps: installedAppIds,
+    });
+
     return jsonResponse({
-      installed: installedApps.includes(WIX_BLOG_APP_ID),
+      installed,
       checkedAt: new Date().toISOString(),
+      siteId: appInstance.site?.siteId ?? null,
+      instanceId: appInstance.instance?.instanceId ?? null,
+      expectedBlogAppId: WIX_BLOG_APP_ID,
+      installedApps: installedAppIds,
     });
   } catch (error) {
     return handleApiError(error);
