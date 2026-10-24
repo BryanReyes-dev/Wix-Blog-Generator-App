@@ -1,55 +1,56 @@
 # Wix Blog Generator
 
-This Wix CLI/Astro app gives approved site members a small workflow for drafting blog articles. Wix site-member authentication is reused. The server checks each member's approval before generation or draft creation, and checks Wix Blog installation before it saves a draft.
+This Wix CLI/Astro app gives approved site members a basic workflow for generating, reviewing, editing, and explicitly saving unpublished Wix Blog drafts. Wix site-member authentication is reused. The server checks each member's approval before generation or draft creation, validates generated article data, and checks Wix Blog installation before saving a draft.
 
-## Member workflow
+## Basic member workflow
 
 1. A member signs in through Wix at `/admin`.
 2. The protected `/admin/workflow` page checks the signed-in member and their approval through a server endpoint.
-3. The member submits a topic, audience, tone, instructions, and optional SEO keywords. The server calls OpenAI's Responses API with a strict JSON schema and validates the returned article.
-4. The member reviews the title and article body, can edit both, and chooses **Create unpublished draft**.
-5. The server checks Wix Blog through the app's `getAppInstance()` response. If Wix Blog is absent or cannot be verified, it stops before calling the draft API.
-6. The server calls Wix Blog `createDraftPost` with `publish: false`, assigns the verified caller's site-member ID, and returns the draft ID and unpublished status.
+3. The member submits a topic, audience, tone, instructions, and optional SEO keywords.
+4. The server calls the Wix AI SDK, then validates the returned article on the server.
+5. The member reviews and edits the title and article body.
+6. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
 
-Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. A short-lived in-process submission guard and a disabled submit button reduce duplicate attempts; they do not provide durable exactly-once delivery across server restarts or uncertain network failures.
+Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
 
-The dashboard remains the administrative surface for member approvals and AI credit inspection. Wix AI Credits provides a balance only; it is not used as the text-generation provider.
+## Wix AI and packages
 
-## Configuration
+Generation uses the Wix AI SDK rather than a direct OpenAI API key. Wix handles AI provider authentication and billing for Wix apps. The AI APIs are currently documented as **Developer Preview**, so their behavior and SDK contracts may change.
 
-Copy the variable names from [.env.example](./.env.example). Set `OPENAI_API_KEY` as a server-only Wix CLI secret variable. Set `OPENAI_MODEL` to override the default `gpt-5.4-mini` model.
+Required packages are included in `package.json`:
 
-For Wix CLI projects, use `wix env set` to store secret server variables on Wix. Use `wix env pull` to make them available to local development; pulled values go into `.env.local`, which is ignored by Git. Never use a `PUBLIC_` prefix for the key.
+- `@wix/ai` — Wix-managed AI provider.
+- `ai` (version 6.0.26 or later) — Vercel AI SDK methods used by Wix AI.
+- `zod` (version 4.1.8 or later) — included as recommended by Wix's SDK setup instructions.
 
-OpenAI usage is billed separately from Wix AI credits. Article briefs are sent to the configured OpenAI API account for generation.
+No `OPENAI_API_KEY` is required. Optional server-side variable `WIX_AI_MODEL` defaults to `gpt-5-mini`; use a model ID supported by Wix AI. Wix's documentation notes that AI model calls consume AI credits and that usage for a Wix app is billed to the Wix users who install the app. Verify the actual wallet and billing behavior on the development site before inviting contributors; a credit-balance display alone does not prove which wallet a generation request consumes.
+
+For Wix CLI projects, use `wix env set` to configure server variables and `wix env pull` to make them available in local development. Never put secrets in public/client variables. This integration does not require a separate OpenAI API key.
 
 ## Wix setup
 
-Configure these app permissions in Wix Developer Center:
+Configure the app permission scope **Invoke AI Models** (`SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS`) in Wix Developer Center. Keep the existing permissions required for member approvals, member lookup, Wix Blog draft creation, app-instance inspection, and the existing AI Credits dashboard.
 
-| Scope | Used for |
-| --- | --- |
-| `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create an unpublished Wix Blog draft. |
-| `SCOPE.DC.MANAGE-YOUR-APP` — Manage Your App | Call Get App Instance and inspect installed Wix app IDs before draft creation. |
-| `SCOPE.DC-MEMBERS.READ-MEMBERS` — Read Members | Read the member directory in the administrative dashboard. |
-| `SCOPE.PROMOTE.MANAGE-SEO` — Manage SEO Settings | Preserve the existing Wix AI Credits balance inspection. |
-| `SCOPE.DC-DATA.READ` — Read Data Items | Read member approvals and verify privileged dashboard access. |
-| `SCOPE.DC-DATA.WRITE` — Write Data Items | Save and revoke member approvals. |
+Also add **Wix Blog** under **App Profile → App Audience → Required Wix products**. The runtime check compares installed Wix apps against Wix Blog app ID `14bcded7-0066-7c35-14d7-466cb3f09103`; the Developer Center dependency helps prevent installation on sites without Blog, while the runtime check remains the final gate.
 
-Also add **Wix Blog** under **App Profile → App Audience → Required Wix products**. The runtime check compares the `site.installedWixApps` list against Wix Blog app ID `14bcded7-0066-7c35-14d7-466cb3f09103`. The Developer Center dependency helps block installation on sites without Blog; the runtime check remains the final gate.
+Approval records are in the app-owned `WorkflowAccess` collection. The API routes must continue to require an active Wix member identity and an approved member before generation or draft creation. Do not trust client-supplied member IDs.
 
-Approval records are in the app-owned `WorkflowAccess` collection. All four item permissions are `PRIVILEGED`, which blocks site members and ordinary CMS editors from reading or changing approvals directly. The admin endpoints also require an active Wix `USER` token and a non-elevated read against that collection. Admin member and credit calls remain non-elevated so Wix can enforce the dashboard user's own permissions.
+## Install and validate
 
-The collection permission change and app scopes must be provisioned on an isolated development site before live testing. No release or site setting was changed as part of this implementation.
-
-## Validation
-
-Run:
+After pulling the branch, install dependencies and refresh the npm lockfile:
 
 ```sh
+npm install
 npm run typecheck
 npm test
 npm run build
 ```
 
-The tests use Node's built-in test runner and mocks for the OpenAI and Wix boundaries. They do not prove that Wix authentication, app permissions, Blog installation, or live draft creation work. Use [ADMIN-AUTH-FLOW.md](./agent-files/ADMIN-AUTH-FLOW.md) for the manual sign-off sequence.
+Then run the app on the Wix development site. Test generation as an approved site member, verify that an unapproved member is rejected, review/edit a generated article, and confirm the final action creates an **unpublished** Wix Blog draft. Confirm the Wix AI model permission and available credits. Verify the owner/installing-user billing behavior before treating the credit requirement as proven.
+
+## Important limitations
+
+- Wix AI APIs are Developer Preview.
+- This branch's code changes do not themselves grant the new Wix permission scope or install Wix Blog on the development site.
+- A successful build or mocked test does not verify live Wix AI authorization, credit billing identity, or Wix Blog draft creation.
+- No app release or production site settings are changed by these source changes.
