@@ -195,6 +195,9 @@ test('Wix AI generation uses the managed provider and parses the article JSON', 
 
   assert.equal(typeof callArgs.system, 'string');
   assert.match(callArgs.system, /valid JSON/);
+  assert.match(callArgs.system, /no more than 5 strings/);
+  assert.match(callArgs.system, /title 1-200 characters/);
+  assert.match(callArgs.system, /under 30000 characters/);
   assert.equal(callArgs.prompt, JSON.stringify({
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
   }));
