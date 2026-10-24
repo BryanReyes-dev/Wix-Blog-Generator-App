@@ -67,7 +67,7 @@ export async function generateBlogArticle(
       abortSignal: AbortSignal.timeout(45_000),
     });
 
-    const text = result.text.trim().replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/, '');
+    const text = result.text.trim();
     if (!text) {
       throw new AiProviderError('Wix AI did not return an article. Please try again.');
     }
