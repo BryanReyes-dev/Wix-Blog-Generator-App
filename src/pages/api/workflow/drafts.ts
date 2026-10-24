@@ -6,8 +6,7 @@ import { handleApiError, jsonResponse, requireApprovedSiteMember } from '../../.
 import { ApiError } from '../../../lib/server/authorization-core';
 import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/server/blog-content';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
-
-const WIX_BLOG_APP_ID = '14bcded7-0066-7c35-14d7-466cb3f09103';
+import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
 
 async function verifyWixBlogInstalled(): Promise<void> {
   let appInstance;
@@ -53,7 +52,7 @@ async function verifyWixBlogInstalled(): Promise<void> {
     );
   }
 
-  if (!installedApps.includes(WIX_BLOG_APP_ID)) {
+  if (!isWixBlogInstalled(installedApps)) {
     throw new ApiError(
       409,
       'Wix Blog is not installed on this site. Ask the site owner to install Wix Blog before creating a draft. No draft was attempted.',
