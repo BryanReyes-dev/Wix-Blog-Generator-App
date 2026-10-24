@@ -114,11 +114,42 @@ export const POST: APIRoute = async ({ request }) => {
             },
             { publish: false },
           );
-        } catch {
-          console.error('[AI Blog Generator] Wix Blog draft creation failed.');
+        } catch (error) {
+          const errorRecord = error && typeof error === 'object'
+            ? error as Record<string, unknown>
+            : null;
+          const cause = errorRecord?.cause && typeof errorRecord.cause === 'object'
+            ? errorRecord.cause as Record<string, unknown>
+            : null;
+
+          // Log Wix's error metadata so permission/API failures can be diagnosed.
+          // Do not log the draft title, article body, or SEO content.
+          console.error('[AI Blog Generator] Wix Blog draft creation failed:', {
+            name: error instanceof Error ? error.name : typeof error,
+            message: error instanceof Error ? error.message : String(error),
+            code: errorRecord?.code ?? errorRecord?.errorCode ?? null,
+            statusCode: errorRecord?.statusCode ?? errorRecord?.status ?? null,
+            requestId: errorRecord?.requestId ?? errorRecord?.details && (
+              typeof errorRecord.details === 'object'
+                ? (errorRecord.details as Record<string, unknown>).requestId
+                : null
+            ) ?? null,
+            details: errorRecord?.details ?? null,
+            cause: cause
+              ? {
+                  name: cause.name ?? null,
+                  message: cause.message ?? null,
+                  code: cause.code ?? null,
+                  statusCode: cause.statusCode ?? cause.status ?? null,
+                }
+              : errorRecord?.cause instanceof Error
+                ? { name: errorRecord.cause.name, message: errorRecord.cause.message }
+                : null,
+          });
+
           throw new ApiError(
             502,
-            'Wix Blog could not create the draft. Check the app’s Manage Blog permission and try again. If the request timed out, check Wix Blog before retrying because the result may be unknown.',
+            'Wix Blog could not create the draft. Check the server log entry for the Wix error code and status. Wix Blog drafts are never published automatically.',
           );
         }
 
