@@ -35,8 +35,16 @@ export const POST: APIRoute = async ({ request }) => {
     let article;
     try {
       article = parseGeneratedArticle(generated);
-    } catch {
-      throw new AiProviderError('Wix AI returned article data that did not pass validation. Please try again.');
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Unknown validation error';
+      console.warn('[workflow/generate] Wix AI article failed validation:', {
+        name: error instanceof Error ? error.name : typeof error,
+        reason,
+      });
+      throw new AiProviderError(
+        'Wix AI returned an article that did not meet the required format: ' + reason + ' Please regenerate.',
+        502,
+      );
     }
 
     return jsonResponse({ article });
