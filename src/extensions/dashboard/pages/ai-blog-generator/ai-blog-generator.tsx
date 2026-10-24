@@ -27,6 +27,11 @@ type Credits = {
   checkedAt: string;
 };
 
+type WixBlogStatus = {
+  installed: boolean;
+  checkedAt: string;
+};
+
 type MemberPage = {
   members: MemberRow[];
   offset: number;
@@ -51,6 +56,9 @@ const DashboardPage: FC = () => {
   const [credits, setCredits] = useState<Credits | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(true);
   const [creditsError, setCreditsError] = useState('');
+  const [wixBlogStatus, setWixBlogStatus] = useState<WixBlogStatus | null>(null);
+  const [wixBlogStatusLoading, setWixBlogStatusLoading] = useState(true);
+  const [wixBlogStatusError, setWixBlogStatusError] = useState('');
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membersError, setMembersError] = useState('');
@@ -75,6 +83,22 @@ const DashboardPage: FC = () => {
       setCredits(null);
     } finally {
       setCreditsLoading(false);
+    }
+  };
+
+  const loadWixBlogStatus = async () => {
+    setWixBlogStatusLoading(true);
+    setWixBlogStatusError('');
+
+    try {
+      const response = await httpClient.fetchWithAuth(API_BASE_URL + '/api/admin/blog-status');
+      if (!response.ok) throw new Error(await readApiError(response));
+      setWixBlogStatus(await response.json() as WixBlogStatus);
+    } catch (error) {
+      setWixBlogStatusError(error instanceof Error ? error.message : 'Unable to verify Wix Blog installation.');
+      setWixBlogStatus(null);
+    } finally {
+      setWixBlogStatusLoading(false);
     }
   };
 
@@ -110,6 +134,7 @@ const DashboardPage: FC = () => {
   useEffect(() => {
     void loadCredits();
     void loadMembers(0, '');
+    void loadWixBlogStatus();
     // Load live Wix data when the dashboard opens.
   }, []);
 
@@ -147,11 +172,33 @@ const DashboardPage: FC = () => {
   const pageDescription = totalMembers === null
     ? 'Page ' + pageNumber
     : 'Page ' + pageNumber + ' of ' + Math.max(1, Math.ceil(totalMembers / PAGE_SIZE));
-  const setupPending = creditsLoading || membersLoading;
-  const setupReady = !setupPending && !creditsError && !membersError && accessStorageAvailable;
+  const setupPending = creditsLoading || membersLoading || wixBlogStatusLoading;
+  const setupReady = !setupPending &&
+    !creditsError &&
+    !membersError &&
+    !wixBlogStatusError &&
+    wixBlogStatus?.installed === true &&
+    accessStorageAvailable;
   const setupStatusLabel = setupPending
     ? 'Checking permissions'
     : setupReady ? 'Connected' : 'Action needed';
+  const blogStatusLabel = wixBlogStatusLoading
+    ? 'Checking installation'
+    : wixBlogStatusError
+      ? 'Unable to verify'
+      : wixBlogStatus?.installed
+        ? 'Installed'
+        : 'Not detected';
+  const blogStatusCopy = wixBlogStatusLoading
+    ? 'Checking the current site’s installed Wix apps…'
+    : wixBlogStatusError
+      ? 'Wix could not confirm the installation. Check the app-instance diagnostic or server logs.'
+      : wixBlogStatus?.installed
+        ? 'Connected — Wix Blog is installed on this site. Drafts can be checked before saving.'
+        : 'Wix Blog was not found in the current site’s installed-app list. Confirm this is the intended site and install Wix Blog if it is missing.';
+  const blogStatusDot = !wixBlogStatusLoading && !wixBlogStatusError && wixBlogStatus?.installed
+    ? styles.statusReady
+    : styles.statusPending;
 
   return (
     <WixDesignSystemProvider>
@@ -197,6 +244,7 @@ const DashboardPage: FC = () => {
                     onClick={() => {
                       void loadCredits();
                       void loadMembers(0, activeSearch);
+                      void loadWixBlogStatus();
                     }}
                     disabled={setupPending}
                   >
@@ -209,7 +257,7 @@ const DashboardPage: FC = () => {
                 <span className={styles.statusDot + ' ' + (setupPending ? styles.statusPending : setupReady ? styles.statusReady : styles.statusPending)} aria-hidden="true" />
                 <strong>{setupStatusLabel}</strong>
                 {setupReady
-                  ? ' — member lookup, credit balance, and workflow approval storage are available.'
+                  ? ' — member lookup, credit balance, workflow approval storage, and Wix Blog installation are available.'
                   : setupPending
                     ? ' — checking access with Wix.'
                     : ' — review the checks below and resolve any blocked permissions or storage setup.'}
@@ -237,6 +285,14 @@ const DashboardPage: FC = () => {
                   <div>
                     <strong>Workflow approval storage</strong>
                     <p>{membersLoading ? 'Checking the app-owned data collection…' : accessStorageAvailable ? 'Connected — approval records can be read.' : 'Unavailable — confirm the app-owned collection has been provisioned on this site.'}</p>
+                  </div>
+                </article>
+
+                <article className={styles.setupItem}>
+                  <span className={styles.statusDot + ' ' + blogStatusDot} aria-hidden="true" />
+                  <div>
+                    <strong>Wix Blog installation</strong>
+                    <p>{blogStatusCopy}</p>
                   </div>
                 </article>
               </div>
@@ -273,12 +329,18 @@ const DashboardPage: FC = () => {
 
               <article className={styles.statusCard}>
                 <div className={styles.cardTopline}>
-                  <span className={styles.statusDot + ' ' + styles.statusPending} aria-hidden="true" />
-                  <span className={styles.statusLabel}>Checked before saving</span>
+                  <span className={styles.statusDot + ' ' + blogStatusDot} aria-hidden="true" />
+                  <span className={styles.statusLabel}>{blogStatusLabel}</span>
                 </div>
                 <h3 className={styles.cardTitle}>Wix Blog drafts</h3>
                 <p className={styles.cardCopy}>
-                  The member workflow verifies Wix Blog before draft creation. Members review and edit generated content first; publishing is not available.
+                  {wixBlogStatusLoading
+                    ? 'Checking whether Wix Blog is installed on this site…'
+                    : wixBlogStatusError
+                      ? 'Installation could not be verified. ' + wixBlogStatusError
+                      : wixBlogStatus?.installed
+                        ? 'Wix Blog is installed. Members review and edit generated content before explicitly saving an unpublished draft; publishing is not available.'
+                        : 'Wix Blog was not found in the current site’s installed-app list. Confirm the target site and install Wix Blog if needed. No draft will be attempted until the installation is verified.'}
                 </p>
               </article>
             </section>
