@@ -30,6 +30,10 @@ type Credits = {
 type WixBlogStatus = {
   installed: boolean;
   checkedAt: string;
+  siteId?: string | null;
+  instanceId?: string | null;
+  expectedBlogAppId?: string;
+  installedApps?: string[];
 };
 
 type MemberPage = {
@@ -195,10 +199,20 @@ const DashboardPage: FC = () => {
       ? 'Wix could not confirm the installation. Check the app-instance diagnostic or server logs.'
       : wixBlogStatus?.installed
         ? 'Connected — Wix Blog is installed on this site. Drafts can be checked before saving.'
-        : 'Wix Blog was not found in the current site’s installed-app list. Confirm this is the intended site and install Wix Blog if it is missing.';
+        : 'Wix’s app-instance list did not include the Wix Blog ID. Check the diagnostic details below before reinstalling Blog.';
   const blogStatusDot = !wixBlogStatusLoading && !wixBlogStatusError && wixBlogStatus?.installed
     ? styles.statusReady
     : styles.statusPending;
+  const blogInventoryDiagnostic = wixBlogStatus && !wixBlogStatus.installed
+    ? [
+        wixBlogStatus.siteId ? 'Site ID: ' + wixBlogStatus.siteId : null,
+        wixBlogStatus.instanceId ? 'App instance: ' + wixBlogStatus.instanceId : null,
+        'Expected Wix Blog ID: ' + (wixBlogStatus.expectedBlogAppId ?? 'not returned'),
+        'IDs reported by Wix: ' + (wixBlogStatus.installedApps?.length
+          ? wixBlogStatus.installedApps.join(', ')
+          : '(empty list)'),
+      ].filter(Boolean).join(' · ')
+    : '';
 
   return (
     <WixDesignSystemProvider>
@@ -340,8 +354,11 @@ const DashboardPage: FC = () => {
                       ? 'Installation could not be verified. ' + wixBlogStatusError
                       : wixBlogStatus?.installed
                         ? 'Wix Blog is installed. Members review and edit generated content before explicitly saving an unpublished draft; publishing is not available.'
-                        : 'Wix Blog was not found in the current site’s installed-app list. Confirm the target site and install Wix Blog if needed. No draft will be attempted until the installation is verified.'}
+                        : 'Wix’s app-instance list did not include the Wix Blog ID. No draft will be attempted until the inventory mismatch is resolved.'}
                 </p>
+                {!wixBlogStatusError && !wixBlogStatusLoading && wixBlogStatus?.installed === false ? (
+                  <p className={styles.memberEmail}>{blogInventoryDiagnostic}</p>
+                ) : null}
               </article>
             </section>
 
