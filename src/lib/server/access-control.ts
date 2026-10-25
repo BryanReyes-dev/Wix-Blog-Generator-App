@@ -21,8 +21,7 @@ async function getActiveToken() {
 /**
  * Dashboard endpoints use Wix's dashboard-user identity. They must never accept
  * a public visitor or site-member identity for elevated administration actions.
-*/
-
+ */
 export async function requireDashboardUser() {
   const token = await getActiveToken();
   return requireWixSubject(token, 'USER') satisfies AuthenticatedIdentity;
@@ -31,8 +30,7 @@ export async function requireDashboardUser() {
 /**
  * Site-widget routes derive the member ID from Wix's signed token and never
  * trust a member ID supplied by the browser.
-*/
-
+ */
 export async function requireSiteMember() {
   const token = await getActiveToken();
   return requireWixSubject(token, 'MEMBER') satisfies AuthenticatedMember;
@@ -42,8 +40,7 @@ export async function requireSiteMember() {
  * Confirms a dashboard caller has Wix's privileged site access by making a
  * non-elevated read against the approval collection, whose read permission is
  * PRIVILEGED. Wix evaluates the current dashboard user's role for this call.
-*/
-
+ */
 export async function requireWorkflowAdministrator() {
   const token = await getActiveToken();
 
@@ -88,7 +85,7 @@ export async function requireWorkflowAdministrator() {
 
       throw new ApiError(
         503,
-        `Workflow collection check failed. Code: ${String(code ?? 'unknown')}; HTTP status: ${String(statusCode ?? 'unknown')}. Access remains blocked.`,
+        \`Workflow collection check failed. Code: \${String(code ?? 'unknown')}; HTTP status: \${String(statusCode ?? 'unknown')}. Access remains blocked.\`,
       );
     }
   });
@@ -100,6 +97,10 @@ type AccessQueryResponse = {
   _items?: unknown[];
 };
 
+/**
+ * Reads whether one member has workflow access. Kept for one-member checks in
+ * the protected site workflow.
+ */
 export async function isMemberApproved(memberId: string): Promise<boolean> {
   const elevatedQuery = auth.elevate(items.query);
   const result = await elevatedQuery(
@@ -120,11 +121,74 @@ export async function isMemberApproved(memberId: string): Promise<boolean> {
   return records.length > 0;
 }
 
+function getRecordMemberId(record: unknown): string | null {
+  if (!record || typeof record !== 'object') return null;
+
+  const item = record as Record<string, unknown>;
+  const data = item.data && typeof item.data === 'object'
+    ? item.data as Record<string, unknown>
+    : {};
+  const dataItem = item.dataItem && typeof item.dataItem === 'object'
+    ? item.dataItem as Record<string, unknown>
+    : {};
+  const nestedData = dataItem.data && typeof dataItem.data === 'object'
+    ? dataItem.data as Record<string, unknown>
+    : {};
+
+  const candidates = [
+    item.memberId,
+    data.memberId,
+    dataItem.memberId,
+    nestedData.memberId,
+  ];
+
+  return candidates.find(
+    (value): value is string => typeof value === 'string',
+  ) ?? null;
+}
+
+/**
+ * Batch-checks the current dashboard page in one elevated Wix Data query,
+ * avoiding one query per member and the Worker subrequest limit.
+ */
+export async function getApprovedMemberIds(
+  memberIds: string[],
+): Promise<Set<string>> {
+  const uniqueIds = [...new Set(
+    memberIds.filter((id) => typeof id === 'string' && id.length > 0),
+  )];
+
+  if (uniqueIds.length === 0) {
+    return new Set<string>();
+  }
+
+  const elevatedQuery = auth.elevate(items.query);
+  const result = await elevatedQuery(
+    WORKFLOW_ACCESS_COLLECTION_ID,
+    {
+      filter: { memberId: { $in: uniqueIds } },
+      paging: { limit: uniqueIds.length, offset: 0 },
+    },
+    { consistentRead: true },
+  ) as unknown as AccessQueryResponse;
+
+  const records = result.items ?? result.dataItems ?? result._items;
+
+  if (!Array.isArray(records)) {
+    throw new Error('Wix Data query returned an unrecognized access-record response.');
+  }
+
+  return new Set(
+    records
+      .map(getRecordMemberId)
+      .filter((memberId): memberId is string => memberId !== null),
+  );
+}
+
 /**
  * Reuse this guard at the start of every future member-facing operation that
  * creates or changes drafts. Authentication alone is not authorization.
-*/
-
+ */
 export async function requireApprovedSiteMember() {
   const token = await getActiveToken();
   return requireApprovedMember(token, isMemberApproved);
