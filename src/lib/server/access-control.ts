@@ -85,7 +85,7 @@ export async function requireWorkflowAdministrator() {
 
       throw new ApiError(
         503,
-        \`Workflow collection check failed. Code: \${String(code ?? 'unknown')}; HTTP status: \${String(statusCode ?? 'unknown')}. Access remains blocked.\`,
+        `Workflow collection check failed. Code: ${String(code ?? 'unknown')}; HTTP status: ${String(statusCode ?? 'unknown')}. Access remains blocked.`,
       );
     }
   });
