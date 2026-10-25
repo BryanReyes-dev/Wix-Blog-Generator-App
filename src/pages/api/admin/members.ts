@@ -96,20 +96,68 @@ export const GET: APIRoute = async ({ url }) => {
         : [];
 
     let accessStorageAvailable = true;
+    let accessStorageDiagnostic: {
+    stage: 'member-id-missing' | 'approval-query';
+    errorName?: string;
+    code?: string | null;
+    statusCode?: string | null;
+    requestId?: string | null;
+    message?: string;
+  } | null = null;
     const rows = await Promise.all(sourceRows.map(async (member) => {
       const memberId = member._id ?? member.id;
 
       if (!memberId) {
         accessStorageAvailable = false;
+        accessStorageDiagnostic ??= { stage: 'member-id-missing' };
         return null;
       }
 
       let approved: boolean | null = null;
-      try {
-        approved = await isMemberApproved(memberId);
-      } catch {
-        accessStorageAvailable = false;
-      }
+
+        try {
+          approved = await isMemberApproved(memberId);
+        } catch (error) {
+          accessStorageAvailable = false;
+
+          const err = error && typeof error === 'object'
+            ? error as Record<string, unknown>
+            : {};
+
+          const details = err.details && typeof err.details === 'object'
+            ? err.details as Record<string, unknown>
+            : {};
+          const code = err.code ?? err.errorCode
+            ?? details.code ?? details.errorCode ?? null;
+
+          const statusCode = err.statusCode ?? err.status
+            ?? details.statusCode ?? details.status ?? null;
+
+          const requestId = err.requestId ?? details.requestId ?? null;
+
+          accessStorageDiagnostic ??= {
+            stage: 'approval-query',
+            errorName: error instanceof Error ? error.name : typeof error,
+            code: code == null ? null : String(code),
+            statusCode: statusCode == null ? null : String(statusCode),
+            requestId: requestId == null ? null : String(requestId).slice(0, 100),
+            message: (error instanceof Error ? error.message : String(error))
+              .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+              .replace(/\s+/g, ' ')
+              .slice(0, 200),
+          };
+
+          console.error('[workflow-access-storage] Approval query failed:', {
+            errorName: error instanceof Error ? error.name : typeof error,
+            message: (error instanceof Error
+              ? error.message
+              : String(error)).slice(0, 300),
+            code: err.code ?? err.errorCode ?? details.code ?? null,
+            statusCode: err.statusCode ?? err.status
+              ?? details.statusCode ?? details.status ?? null,
+            requestId: err.requestId ?? details.requestId ?? null,
+          });
+        }
 
       return {
         memberId,
@@ -119,6 +167,7 @@ export const GET: APIRoute = async ({ url }) => {
         activityStatus: member.activityStatus ?? 'UNKNOWN',
         privacyStatus: member.privacyStatus ?? 'UNKNOWN',
         approved,
+        
       };
     }));
 
@@ -136,6 +185,7 @@ export const GET: APIRoute = async ({ url }) => {
         ? sourceRows.length === limit
         : offset + sourceRows.length < total,
       accessStorageAvailable,
+      accessStorageDiagnostic,
     });
   } catch (error) {
     return handleApiError(error);

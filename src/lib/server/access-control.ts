@@ -21,7 +21,8 @@ async function getActiveToken() {
 /**
  * Dashboard endpoints use Wix's dashboard-user identity. They must never accept
  * a public visitor or site-member identity for elevated administration actions.
- */
+*/
+
 export async function requireDashboardUser() {
   const token = await getActiveToken();
   return requireWixSubject(token, 'USER') satisfies AuthenticatedIdentity;
@@ -30,7 +31,8 @@ export async function requireDashboardUser() {
 /**
  * Site-widget routes derive the member ID from Wix's signed token and never
  * trust a member ID supplied by the browser.
- */
+*/
+
 export async function requireSiteMember() {
   const token = await getActiveToken();
   return requireWixSubject(token, 'MEMBER') satisfies AuthenticatedMember;
@@ -40,17 +42,55 @@ export async function requireSiteMember() {
  * Confirms a dashboard caller has Wix's privileged site access by making a
  * non-elevated read against the approval collection, whose read permission is
  * PRIVILEGED. Wix evaluates the current dashboard user's role for this call.
- */
+*/
+
 export async function requireWorkflowAdministrator() {
   const token = await getActiveToken();
 
   return requirePrivilegedDashboardUser(token, async () => {
-    await items.query(
-      WORKFLOW_ACCESS_COLLECTION_ID,
-      { paging: { limit: 1, offset: 0 } },
-      { consistentRead: true },
-    );
-    return true;
+    try {
+      await items.query(
+        WORKFLOW_ACCESS_COLLECTION_ID,
+        { paging: { limit: 1, offset: 0 } },
+        { consistentRead: true },
+      );
+
+      return true;
+    } catch (error) {
+      const err = error && typeof error === 'object'
+        ? error as Record<string, unknown>
+        : {};
+
+      const details = err.details && typeof err.details === 'object'
+        ? err.details as Record<string, unknown>
+        : {};
+
+      const code = err.code ?? err.errorCode
+        ?? details.code ?? details.errorCode ?? null;
+
+      const statusCode = err.statusCode ?? err.status
+        ?? details.statusCode ?? details.status ?? null;
+
+      const message = (error instanceof Error
+        ? error.message
+        : String(error))
+        .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+        .replace(/\s+/g, ' ')
+        .slice(0, 200);
+
+      console.error('[workflow-access-storage] Administrator query failed:', {
+        errorName: error instanceof Error ? error.name : typeof error,
+        code,
+        statusCode,
+        requestId: err.requestId ?? details.requestId ?? null,
+        message,
+      });
+
+      throw new ApiError(
+        503,
+        `Workflow collection check failed. Code: ${String(code ?? 'unknown')}; HTTP status: ${String(statusCode ?? 'unknown')}. Access remains blocked.`,
+      );
+    }
   });
 }
 
@@ -83,7 +123,8 @@ export async function isMemberApproved(memberId: string): Promise<boolean> {
 /**
  * Reuse this guard at the start of every future member-facing operation that
  * creates or changes drafts. Authentication alone is not authorization.
- */
+*/
+
 export async function requireApprovedSiteMember() {
   const token = await getActiveToken();
   return requireApprovedMember(token, isMemberApproved);

@@ -114,8 +114,11 @@ export async function requirePrivilegedDashboardUser(
 
   try {
     if (await checkPrivilege()) return user;
-  } catch {
-    // Permission lookup errors deny the administrative request.
+  } catch (error) {
+    // Preserve safe diagnostic errors while still denying access.
+    if (error instanceof ApiError) {
+      throw error;
+    }
   }
 
   throw new ApiError(403, 'A Wix dashboard user with privileged site access is required.');
