@@ -8,8 +8,10 @@ This Wix CLI/Astro app gives approved site members a basic workflow for generati
 2. The protected `/admin/workflow` page checks the signed-in member and their approval through a server endpoint.
 3. The member submits a topic, audience, tone, instructions, and optional SEO keywords.
 4. The server calls the Wix AI SDK, then validates the returned article on the server.
-5. The member reviews and edits the title and article body.
-6. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
+5. Members can optionally paste up to five public webpage URLs. The server checks the destination, retrieves a bounded HTML or plain-text excerpt, and passes those excerpts to Wix AI as untrusted research material.
+6. The server checks generated citation markers against the retrieved source IDs, and the editor shows the source URLs alongside a live, visitor-style article preview.
+7. The member reviews and edits the title and article body.
+8. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
 
 Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
 
@@ -47,6 +49,12 @@ npm run build
 ```
 
 Then run the app on the Wix development site. Test generation as an approved site member, verify that an unapproved member is rejected, review/edit a generated article, and confirm the final action creates an **unpublished** Wix Blog draft. Confirm the Wix AI model permission and available credits. Verify the owner/installing-user billing behavior before treating the credit requirement as proven.
+
+## Research links and article preview
+
+Research-link import currently accepts up to five URLs to public HTML or plain-text pages. It rejects IP-literal and local/private destinations, rechecks redirects, applies a ten-second fetch timeout and a one-megabyte response cap, and provides source IDs for inline citations. Generated source markers are mapped to Ricos link decorations when saving a draft. Webpage excerpts are untrusted content; the generation prompt instructs the model to treat them as research rather than instructions.
+
+The preview is a local approximation of the article's headings, paragraphs, lists, citations, and links. Wix's published blog theme still controls final presentation. General search-engine discovery, PDF/document ingestion, and media uploads are not implemented in this slice; contributors must paste public webpage URLs.
 
 ## Important limitations
 

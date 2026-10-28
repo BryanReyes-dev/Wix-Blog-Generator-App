@@ -180,7 +180,8 @@ function renderPreviewContent(
     if (headingMatch) {
       flushParagraph();
       stopList();
-      const heading = element('h' + Math.min(4, Math.max(2, headingMatch[1]?.length ?? 2)));
+      const level = Math.min(4, Math.max(2, headingMatch[1]?.length ?? 2));
+      const heading = level === 2 ? element('h2') : level === 3 ? element('h3') : element('h4');
       appendSafePreviewText(heading, headingMatch[2] ?? '', sources);
       parent.appendChild(heading);
       continue;
@@ -441,6 +442,7 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
             body: bodyInput.value,
             metaDescription: article.metaDescription,
             seoKeywords: article.seoKeywords,
+            researchSources: sources.map(({ id, title, url }) => ({ id, title, url })),
           },
         );
 

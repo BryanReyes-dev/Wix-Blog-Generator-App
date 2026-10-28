@@ -17,6 +17,8 @@ export type ResearchSource = {
   excerpt: string;
 };
 
+export type ResearchCitationSource = Pick<ResearchSource, 'id' | 'title' | 'url'>;
+
 export class ResearchSourceError extends Error {
   readonly status: number;
 
@@ -149,6 +151,32 @@ export async function validateResearchUrl(
   }
 
   return url;
+}
+
+export function parseResearchCitationSources(value: unknown): ResearchCitationSource[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > MAX_RESEARCH_SOURCES) {
+    throw new ResearchSourceError('Research source references must be a list of up to five sources.', 400);
+  }
+
+  const usedIds = new Set<string>();
+  return value.map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new ResearchSourceError('A research source reference is invalid.', 400);
+    }
+    const source = entry as Record<string, unknown>;
+    const id = typeof source.id === 'string' ? source.id : '';
+    const title = typeof source.title === 'string' ? source.title.trim() : '';
+    if (!/^S[1-5]$/.test(id) || usedIds.has(id)) {
+      throw new ResearchSourceError('Research source IDs must be unique IDs from S1 through S5.', 400);
+    }
+    if (!title || title.length > 240) {
+      throw new ResearchSourceError('A research source title is missing or too long.', 400);
+    }
+    const url = validateUrlSyntax(source.url);
+    usedIds.add(id);
+    return { id, title, url: url.href };
+  });
 }
 
 export function parseResearchUrls(value: unknown): string[] {

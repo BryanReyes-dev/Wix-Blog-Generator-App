@@ -41,10 +41,21 @@ export type DraftSubmission = {
   seoKeywords: string[];
 };
 
+type RichTextDecoration = {
+  type: 'LINK';
+  linkData: {
+    link: {
+      url: string;
+      target: 'BLANK';
+      rel: { noreferrer: true };
+    };
+  };
+};
+
 type RichTextNode = {
   type: 'TEXT' | 'PARAGRAPH' | 'HEADING';
   nodes?: RichTextNode[];
-  textData?: { text: string; decorations: [] };
+  textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
   headingData?: { level: number; textStyle: { textAlignment: 'AUTO' } };
 };
@@ -166,37 +177,90 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
   };
 }
 
-function textNode(text: string): RichTextNode {
+type CitationLink = { id: string; url: string };
+
+function textNode(text: string, decorations: RichTextDecoration[] = []): RichTextNode {
   return {
     type: 'TEXT',
     nodes: [],
-    textData: { text, decorations: [] },
+    textData: { text, decorations },
   };
 }
 
-function paragraphNode(text: string): RichTextNode {
+function inlineTextNodes(text: string, citationSources: CitationLink[]): RichTextNode[] {
+  const sourceById = new Map(citationSources.map((source) => [source.id, source.url]));
+  const pattern = /\[S\d+\]|https?:\/\/[^\s<>"']+/g;
+  const nodes: RichTextNode[] = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0];
+    const index = match.index;
+    if (index > cursor) nodes.push(textNode(text.slice(cursor, index)));
+
+    const citation = /^\[(S\d+)\]$/.exec(token);
+    if (citation) {
+      const sourceUrl = sourceById.get(citation[1] ?? '');
+      nodes.push(sourceUrl
+        ? textNode(token, [{
+            type: 'LINK',
+            linkData: { link: { url: sourceUrl, target: 'BLANK', rel: { noreferrer: true } } },
+          }])
+        : textNode(token));
+      cursor = index + token.length;
+      continue;
+    }
+
+    const trailing = /[),.;!?]+$/.exec(token)?.[0] ?? '';
+    const candidate = trailing ? token.slice(0, -trailing.length) : token;
+    let safeUrl: string | null = null;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === 'http:' || url.protocol === 'https:') safeUrl = url.href;
+    } catch {
+      // Invalid URL-looking text remains a plain text node.
+    }
+
+    nodes.push(safeUrl
+      ? textNode(candidate, [{
+          type: 'LINK',
+          linkData: { link: { url: safeUrl, target: 'BLANK', rel: { noreferrer: true } } },
+        }])
+      : textNode(candidate));
+    if (trailing) nodes.push(textNode(trailing));
+    cursor = index + token.length;
+  }
+
+  if (cursor < text.length) nodes.push(textNode(text.slice(cursor)));
+  return nodes.length ? nodes : [textNode(text)];
+}
+
+function paragraphNode(text: string, citationSources: CitationLink[]): RichTextNode {
   return {
     type: 'PARAGRAPH',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, citationSources),
     paragraphData: { textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-function headingNode(text: string, level: number): RichTextNode {
+function headingNode(text: string, level: number, citationSources: CitationLink[]): RichTextNode {
   return {
     type: 'HEADING',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, citationSources),
     headingData: { level, textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-export function bodyToRichContent(body: string): WixRichContent {
+export function bodyToRichContent(
+  body: string,
+  citationSources: CitationLink[] = [],
+): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
   let paragraphLines: string[] = [];
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0) return;
-    contentBlocks.push(paragraphNode(paragraphLines.join(' ')));
+    contentBlocks.push(paragraphNode(paragraphLines.join(' '), citationSources));
     paragraphLines = [];
   };
 
@@ -213,7 +277,7 @@ export function bodyToRichContent(body: string): WixRichContent {
       const hashes = headingMatch[1] ?? '';
       const heading = headingMatch[2]?.trim();
       if (heading) {
-        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length)));
+        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length), citationSources));
       }
       continue;
     }

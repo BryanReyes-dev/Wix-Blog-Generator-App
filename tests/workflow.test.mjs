@@ -22,6 +22,7 @@ import {
   assertCitationIntegrity,
   extractResearchPage,
   loadResearchSources,
+  parseResearchCitationSources,
   parseResearchUrls,
   ResearchSourceError,
   validateResearchUrl,
@@ -411,4 +412,45 @@ test('Wix AI receives research excerpts with explicit citation instructions when
   assert.match(callArgs.system, /untrusted webpage content/);
   assert.match(callArgs.system, /exact form \[S1\]/);
   assert.deepEqual(JSON.parse(callArgs.prompt).researchSources, sources);
+});
+
+
+test('draft rich content turns verified citation markers and source URLs into real Ricos links', () => {
+  const source = {
+    id: 'S1',
+    title: 'Public research article',
+    url: 'https://public.example.com/article',
+  };
+  const sources = parseResearchCitationSources([source]);
+  const document = bodyToRichContent(
+    '## Research\n\nA grounded claim [S1].\n\n## Sources\n\n- [S1] Public research article — https://public.example.com/article',
+    sources,
+  );
+  const textNodes = document.nodes.flatMap((node) => node.nodes ?? [])
+    .filter((node) => node.type === 'TEXT');
+  const linkedCitation = textNodes.find((node) => node.textData?.text === '[S1]');
+  assert.equal(linkedCitation?.textData?.decorations[0]?.type, 'LINK');
+  assert.equal(linkedCitation?.textData?.decorations[0]?.linkData?.link?.url, source.url);
+  const linkedUrl = textNodes.find((node) => node.textData?.text === source.url);
+  assert.equal(linkedUrl?.textData?.decorations[0]?.type, 'LINK');
+  assert.equal(linkedUrl?.textData?.decorations[0]?.linkData?.link?.url, source.url);
+});
+
+test('draft citation-source parsing rejects forged IDs, invalid schemes, and duplicate IDs', () => {
+  assert.deepEqual(parseResearchCitationSources(undefined), []);
+  assert.throws(
+    () => parseResearchCitationSources([{ id: 'S7', title: 'Source', url: 'https://public.example.com/a' }]),
+    /IDs must be unique IDs from S1 through S5/i,
+  );
+  assert.throws(
+    () => parseResearchCitationSources([{ id: 'S1', title: 'Source', url: 'javascript:alert(1)' }]),
+    ResearchSourceError,
+  );
+  assert.throws(
+    () => parseResearchCitationSources([
+      { id: 'S1', title: 'One', url: 'https://public.example.com/a' },
+      { id: 'S1', title: 'Two', url: 'https://public.example.com/b' },
+    ]),
+    /unique IDs/i,
+  );
 });
