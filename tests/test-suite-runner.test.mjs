@@ -174,3 +174,16 @@ test("the CLI entrypoint reports invalid suite names with exit code 2", () => {
   assert.match(result.stderr, /Unknown test suite: not-a-suite/);
   assert.match(result.stderr, /Available suites: all, runner, auth, workflow/);
 });
+
+test("prototype property names are rejected as unknown suites", async () => {
+  for (const name of ["constructor", "toString", "__proto__"]) {
+    const output = makeOutput();
+    const result = await runTestSuite(name, {
+      spawnCommand: () => assert.fail("unknown suites must not spawn a process"),
+      ...output,
+    });
+
+    assert.equal(result, 2);
+    assert.match(output.stderr.join(""), new RegExp(`Unknown test suite: ${name}`));
+  }
+});
