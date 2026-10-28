@@ -177,7 +177,10 @@ describe("server-side authentication and authorization", () => {
       setToken(makeToken("MEMBER", "member-1"));
       vi.mocked(items.query).mockRejectedValue(new Error("Wix Data unavailable"));
 
-      await expect(requireApprovedSiteMember()).rejects.toThrow("Wix Data unavailable");
+      await expect(requireApprovedSiteMember()).rejects.toMatchObject({
+        status: 503,
+        message: expect.stringContaining("could not be verified"),
+      });
     });
   });
 
