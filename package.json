@@ -15,6 +15,7 @@
     "typecheck": "astro check",
     "test": "vpx scripts/run-test-suite.mjs all",
     "test:all": "vpx scripts/run-test-suite.mjs all",
+    "test:runner": "node --test tests/test-suite-runner.test.mjs",
     "test:auth": "vp test run tests/auth-signoff.test.ts",
     "test:workflow": "node --experimental-strip-types --test tests/workflow.test.mjs"
   },
