@@ -1,18 +1,17 @@
 import type { APIRoute } from 'astro';
 import { aiCredits } from '@wix/ai-credits';
-import { auth } from '@wix/essentials';
 import {
   handleApiError,
   jsonResponse,
-  requireDashboardUser,
+  requireWorkflowAdministrator,
 } from '../../../lib/server/access-control';
 
 export const GET: APIRoute = async () => {
   try {
-    await requireDashboardUser();
+    await requireWorkflowAdministrator();
 
-    const getBalance = auth.elevate(aiCredits.getBalance);
-    const balance = await getBalance();
+    // Preserve the Wix dashboard user's own permissions for account data.
+    const balance = await aiCredits.getBalance();
 
     const periodicCredits = balance.periodicCredits?.balance ?? 0;
     const topUpCredits = balance.topUpCredits?.balance ?? 0;
