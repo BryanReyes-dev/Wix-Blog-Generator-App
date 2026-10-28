@@ -13,20 +13,21 @@
     "generate": "wix generate",
     "skills": "wix skills",
     "typecheck": "astro check",
-    "test": "npm run test:auth && npm run test:workflow",
-    "test:auth": "vitest run tests/auth-signoff.test.ts",
+    "test": "vpx scripts/run-test-suite.mjs all",
+    "test:all": "vpx scripts/run-test-suite.mjs all",
+    "test:auth": "vp test run tests/auth-signoff.test.ts",
     "test:workflow": "node --experimental-strip-types --test tests/workflow.test.mjs"
   },
   "dependencies": {
     "@wix/ai": "^1.0.0",
     "@wix/ai-credits": "^1.0.10",
     "@wix/app-management": "^1.0.171",
-    "@wix/astro": "^2.75.2",
+    "@wix/astro": "^2.75.4",
     "@wix/blog": "^1.0.687",
     "@wix/dashboard": "^1.3.43",
     "@wix/data": "^1.0.527",
     "@wix/design-system": "^1.154.0",
-    "@wix/essentials": "^0.1.23",
+    "@wix/essentials": "^0.1.28",
     "@wix/members": "^1.0.527",
     "@wix/site-location": "^1.34.0",
     "@wix/site-members": "^1.0.0",
@@ -42,13 +43,12 @@
     "@emnapi/runtime": "^1.11.3",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
-    "@wix/astro-wix-hosting-adapter": "^2.0.4",
+    "@wix/astro-wix-hosting-adapter": "^2.0.5",
     "@wix/cli": "^1.2.2",
     "@wix/sdk-types": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "vite-plus": "^1.4.0",
-    "vitest": "^3.2.4"
+    "vite-plus": "^1.4.0"
   },
   "devEngines": {
     "packageManager": {
