@@ -10,6 +10,15 @@ type GeneratedArticle = {
   seoKeywords: string[];
 };
 
+type ResearchSource = {
+  id: string;
+  title: string;
+  url: string;
+  publisher: string;
+  retrievedAt: string;
+  excerpt: string;
+};
+
 type ApiError = { error?: string };
 type ApiSuccess<T> = T & { error?: never };
 
@@ -64,14 +73,170 @@ function makeTextArea(id: string, placeholder: string, rows: number, maxLength: 
   return textarea;
 }
 
-function articleBody(article: GeneratedArticle): string {
-  return [
+function articleBody(article: GeneratedArticle, sources: ResearchSource[] = []): string {
+  const body = [
     '## Introduction',
     article.introduction,
     ...article.sections.flatMap((section) => [`## ${section.heading}`, section.body]),
     '## Conclusion',
     article.conclusion,
-  ].join('\n\n');
+  ];
+  const articleText = body.join('\n');
+  const citedIds = new Set([...articleText.matchAll(/\[(S\d+)\]/g)].map((match) => match[1]));
+  const citedSources = sources.filter((source) => citedIds.has(source.id));
+
+  if (citedSources.length > 0) {
+    body.push(
+      '## Sources',
+      ...citedSources.map((source) => `- [${source.id}] ${source.title} — ${source.url}`),
+    );
+  }
+
+  return body.join('\n\n');
+}
+
+function appendSafePreviewText(
+  parent: HTMLElement,
+  value: string,
+  sources: ResearchSource[],
+) {
+  const tokens = value.split(/(\[S\d+\]|https?:\/\/[^\s<>"']+)/g).filter(Boolean);
+
+  for (const token of tokens) {
+    const citation = /^\[(S\d+)\]$/.exec(token);
+    if (citation) {
+      const source = sources.find((entry) => entry.id === citation[1]);
+      if (source) {
+        const superscript = element('sup');
+        const link = element('a');
+        link.href = source.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = token;
+        link.setAttribute('aria-label', `Open research source ${source.id} in a new tab`);
+        superscript.appendChild(link);
+        parent.appendChild(superscript);
+      } else {
+        parent.appendChild(document.createTextNode(token));
+      }
+      continue;
+    }
+
+    if (token.startsWith('http://') || token.startsWith('https://')) {
+      const trailing = /[),.;!?]+$/.exec(token)?.[0] ?? '';
+      const target = trailing ? token.slice(0, -trailing.length) : token;
+      try {
+        const url = new URL(target);
+        if (url.protocol === 'http:' || url.protocol === 'https:') {
+          const link = element('a');
+          link.href = url.href;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = target;
+          parent.appendChild(link);
+          if (trailing) parent.appendChild(document.createTextNode(trailing));
+          continue;
+        }
+      } catch {
+        // Treat malformed URLs as ordinary text in the preview.
+      }
+    }
+
+    parent.appendChild(document.createTextNode(token));
+  }
+}
+
+function renderPreviewContent(
+  parent: HTMLElement,
+  body: string,
+  sources: ResearchSource[],
+) {
+  parent.replaceChildren();
+  const lines = body.replace(/\r\n?/g, '\n').split('\n');
+  let paragraphLines: string[] = [];
+  let list: HTMLUListElement | null = null;
+
+  const flushParagraph = () => {
+    if (paragraphLines.length === 0) return;
+    const paragraph = element('p');
+    appendSafePreviewText(paragraph, paragraphLines.join(' '), sources);
+    parent.appendChild(paragraph);
+    paragraphLines = [];
+  };
+
+  const stopList = () => {
+    list = null;
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      stopList();
+      continue;
+    }
+
+    const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
+    if (headingMatch) {
+      flushParagraph();
+      stopList();
+      const heading = element('h' + Math.min(4, Math.max(2, headingMatch[1]?.length ?? 2)));
+      appendSafePreviewText(heading, headingMatch[2] ?? '', sources);
+      parent.appendChild(heading);
+      continue;
+    }
+
+    const listMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+    if (listMatch) {
+      flushParagraph();
+      if (!list) {
+        list = element('ul');
+        parent.appendChild(list);
+      }
+      const item = element('li');
+      appendSafePreviewText(item, listMatch[1] ?? '', sources);
+      list.appendChild(item);
+      continue;
+    }
+
+    stopList();
+    paragraphLines.push(trimmed);
+  }
+
+  flushParagraph();
+}
+
+function renderResearchSources(parent: HTMLElement, sources: ResearchSource[]) {
+  if (sources.length === 0) return;
+
+  const card = element('div', styles.metadataCard);
+  const heading = element('strong');
+  heading.textContent = 'Research links retrieved';
+  card.appendChild(heading);
+
+  const list = element('ul', styles.researchSourceList);
+  for (const source of sources) {
+    const item = element('li');
+    const link = element('a');
+    link.href = source.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = `[${source.id}] ${source.title}`;
+    item.appendChild(link);
+
+    const metadata = element('small');
+    metadata.textContent = `${source.publisher} · Retrieved ${new Date(source.retrievedAt).toLocaleString()}`;
+    item.appendChild(metadata);
+
+    if (source.excerpt) {
+      const excerpt = element('p');
+      excerpt.textContent = source.excerpt;
+      item.appendChild(excerpt);
+    }
+    list.appendChild(item);
+  }
+  card.appendChild(list);
+  parent.appendChild(card);
 }
 
 async function postJson<T>(path: string, payload: unknown): Promise<T> {
@@ -155,6 +320,20 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
   const keywords = makeInput('blog-keywords', 'Separate keywords with commas', 400);
   addField(briefForm, 'Optional SEO keywords', keywords, false, 'Up to five suggested keywords.');
 
+  const researchUrls = makeTextArea(
+    'blog-research-urls',
+    'https://example.com/research-article',
+    4,
+    10_240,
+  );
+  addField(
+    briefForm,
+    'Research links (optional)',
+    researchUrls,
+    false,
+    'Paste up to five public webpage URLs, one per line. The app will retrieve readable page text and cite the sources it actually uses. Automatic web search and image uploads are not enabled yet.',
+  );
+
   const generateButton = element('button', styles.button);
   generateButton.type = 'submit';
   generateButton.textContent = 'Generate article';
@@ -175,7 +354,7 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
 
   let currentSubmissionId: string | null = null;
 
-  const renderReview = (article: GeneratedArticle) => {
+  const renderReview = (article: GeneratedArticle, sources: ResearchSource[]) => {
     review.replaceChildren();
     currentSubmissionId = null;
 
@@ -183,6 +362,10 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
     heading.textContent = 'Review and edit';
     const note = element('p', styles.workflowIntro);
     note.textContent = 'Nothing is saved to Wix Blog until you choose “Create unpublished draft.”';
+    const editorPreviewGrid = element('div', styles.editorPreviewGrid);
+    const editorPane = element('div', styles.editorPane);
+    const editorHeading = element('h4', styles.workflowSectionTitle);
+    editorHeading.textContent = 'Editor';
     const reviewForm = element('form', styles.workflowForm);
 
     const titleInput = makeInput('draft-title', 'Article title', 200);
@@ -192,8 +375,31 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
 
     const bodyInput = makeTextArea('draft-body', 'Article content', 18, 30_000);
     bodyInput.required = true;
-    bodyInput.value = articleBody(article);
-    addField(reviewForm, 'Article content', bodyInput, true, 'Edit the text and headings before saving. Use “## Heading” for section headings.');
+    bodyInput.value = articleBody(article, sources);
+    addField(reviewForm, 'Article content', bodyInput, true, 'Edit the text and headings before saving. Use “## Heading” for section headings. The visitor preview updates as you type.');
+
+    const previewPane = element('section', styles.previewPane);
+    previewPane.setAttribute('aria-label', 'Visitor-style article preview');
+    const previewHeader = element('div', styles.previewHeader);
+    const previewHeading = element('h4', styles.workflowSectionTitle);
+    previewHeading.textContent = 'Visitor preview';
+    const previewNote = element('p', styles.workflowHint);
+    previewNote.textContent = 'Approximate content preview; Wix controls the final published blog theme and styling.';
+    previewHeader.append(previewHeading, previewNote);
+    const visitorPreview = element('article', styles.visitorPreview);
+    const visitorTitle = element('h1', styles.visitorTitle);
+    visitorTitle.textContent = titleInput.value;
+    const visitorBody = element('div', styles.visitorBody);
+    renderPreviewContent(visitorBody, bodyInput.value, sources);
+    visitorPreview.append(visitorTitle, visitorBody);
+    previewPane.append(previewHeader, visitorPreview);
+
+    titleInput.addEventListener('input', () => {
+      visitorTitle.textContent = titleInput.value.trim() || 'Your article title';
+    });
+    bodyInput.addEventListener('input', () => {
+      renderPreviewContent(visitorBody, bodyInput.value, sources);
+    });
 
     const meta = element('div', styles.metadataCard);
     const metaHeading = element('strong');
@@ -212,7 +418,10 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
     createButton.type = 'submit';
     createButton.textContent = 'Create unpublished draft';
     reviewForm.append(createButton);
-    review.append(heading, note, reviewForm, meta, keywordGroup);
+    editorPane.append(editorHeading, reviewForm);
+    editorPreviewGrid.append(editorPane, previewPane);
+    review.append(heading, note, editorPreviewGrid, meta, keywordGroup);
+    renderResearchSources(review, sources);
 
     reviewForm.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -259,7 +468,7 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
     setStatus('Generating a structured article…');
 
     try {
-      const result = await postJson<ApiSuccess<{ article: GeneratedArticle }>>(
+      const result = await postJson<ApiSuccess<{ article: GeneratedArticle; sources: ResearchSource[] }>>(
         '/api/workflow/generate',
         {
           topic: topic.value,
@@ -267,6 +476,7 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
           tone: tone.value,
           instructions: instructions.value,
           seoKeywords: keywords.value,
+          researchUrls: researchUrls.value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
         },
       );
 
@@ -274,8 +484,13 @@ export function mountBlogWorkflow(container: HTMLElement, signOut: () => Promise
         throw new Error('The generated article could not be read. Please try again.');
       }
 
-      renderReview(result.article);
-      setStatus('Article generated. Review and edit it before deciding whether to save a draft.');
+      const sources = Array.isArray(result.sources) ? result.sources : [];
+      renderReview(result.article, sources);
+      setStatus(
+        sources.length
+          ? `Article generated with ${sources.length} retrieved research source(s). Check citations and preview before saving a draft.`
+          : 'Article generated. Review the visitor preview and edit it before deciding whether to save a draft.',
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'Article generation failed. Please try again.', 'error');
     } finally {

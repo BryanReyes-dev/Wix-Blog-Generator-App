@@ -145,6 +145,84 @@
   gap: 16px;
 }
 
+.editorPreviewGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.editorPane {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+
+.previewPane {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.previewHeader {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e1e6ef;
+  background: #f8fafc;
+}
+
+.previewHeader .workflowHint {
+  display: block;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.visitorPreview {
+  padding: 24px;
+  color: #242b37;
+  background: #ffffff;
+  font-family: Georgia, 'Times New Roman', serif;
+  overflow-wrap: anywhere;
+}
+
+.visitorTitle {
+  margin: 0 0 20px;
+  color: #182230;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 2.4vw, 34px);
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.visitorBody {
+  color: #303846;
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.visitorBody h2,
+.visitorBody h3,
+.visitorBody h4 {
+  margin: 1.5em 0 0.55em;
+  color: #182230;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.3;
+}
+
+.visitorBody h2 { font-size: 22px; }
+.visitorBody h3 { font-size: 19px; }
+.visitorBody h4 { font-size: 17px; }
+.visitorBody p { margin: 0 0 1em; }
+.visitorBody ul { padding-left: 1.4em; margin: 0 0 1em; }
+.visitorBody a,
+.researchSourceList a { color: #245db7; text-decoration: underline; text-underline-offset: 2px; }
+.visitorBody sup { margin-left: 2px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.72em; }
+.researchSourceList { display: grid; gap: 12px; margin: 12px 0 0; padding-left: 20px; }
+.researchSourceList li { padding-left: 3px; }
+.researchSourceList small { display: block; margin-top: 3px; color: #667085; font-size: 11px; }
+.researchSourceList p { margin: 6px 0 0; color: #475467; font-size: 12px; line-height: 1.55; }
+
 .workflowSectionTitle {
   margin: 0;
   color: #172033;
@@ -201,8 +279,13 @@
   color: #12633b;
 }
 
+@media (max-width: 900px) {
+  .editorPreviewGrid { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media (max-width: 620px) {
   .workflowRoot { padding: 18px; }
   .workflowTopBar { flex-direction: column; }
   .workflowForm { padding: 16px; }
+  .visitorPreview { padding: 18px; }
 }
