@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   TEST_SUITES,
   runTestSuite,
@@ -155,4 +157,20 @@ test("a terminated child process is treated as a failure", async () => {
 
   assert.equal(result, 1);
   assert.equal(calls.length, 1);
+});
+
+test("the CLI entrypoint reports invalid suite names with exit code 2", () => {
+  const runnerPath = fileURLToPath(
+    new URL("../scripts/run-test-suite.mjs", import.meta.url),
+  );
+  const result = spawnSync(
+    process.execPath,
+    [runnerPath, "not-a-suite"],
+    { encoding: "utf8" },
+  );
+
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Unknown test suite: not-a-suite/);
+  assert.match(result.stderr, /Available suites: all, runner, auth, workflow/);
 });
