@@ -50,7 +50,9 @@ export async function runTestSuite(
     writeErr = (message) => process.stderr.write(message),
   } = {},
 ) {
-  const selectedTests = TEST_SUITES[selected];
+  const selectedTests = Object.hasOwn(TEST_SUITES, selected)
+    ? TEST_SUITES[selected]
+    : undefined;
 
   if (!selectedTests) {
     writeErr(
