@@ -18,6 +18,14 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import {
+  assertCitationIntegrity,
+  extractResearchPage,
+  loadResearchSources,
+  parseResearchUrls,
+  ResearchSourceError,
+  validateResearchUrl,
+} from '../src/lib/server/research-sources.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -244,4 +252,163 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
+});
+
+
+const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+const sourceRecord = (id = 'S1') => ({
+  id,
+  title: 'Public research article',
+  url: 'https://public.example.com/article',
+  publisher: 'public.example.com',
+  retrievedAt: '2026-10-28T12:00:00.000Z',
+  excerpt: 'A sufficiently long public research excerpt for our deterministic tests.',
+});
+
+test('research URLs accept a short public URL list and reject unsafe, duplicate, and excessive inputs', () => {
+  assert.deepEqual(
+    parseResearchUrls('https://public.example.com/a\n\nhttps://public.example.org/b'),
+    ['https://public.example.com/a', 'https://public.example.org/b'],
+  );
+  assert.deepEqual(parseResearchUrls(''), []);
+  assert.throws(() => parseResearchUrls('file:///etc/passwd'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('http://localhost/admin'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('https://user:pass@public.example.com/a'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('https://public.example.com/a\nhttps://public.example.com/a'), /duplicate/i);
+  assert.throws(() => parseResearchUrls(Array.from({ length: 6 }, (_, index) => 'https://source' + index + '.example.com/a')), /no more than five/i);
+});
+
+test('research URL validation removes fragments and rejects private or mixed DNS results', async () => {
+  const url = await validateResearchUrl('https://public.example.com/story#section', publicDns);
+  assert.equal(url.href, 'https://public.example.com/story');
+
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [{ address: '127.0.0.1', family: 4 }]),
+    ResearchSourceError,
+  );
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.12', family: 4 },
+    ]),
+    /public internet addresses/i,
+  );
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [{ address: '::1', family: 6 }]),
+    ResearchSourceError,
+  );
+});
+
+test('research page extraction preserves article text and strips scripts and navigation', () => {
+  const html = '<html><head><title>Practical Research Guide</title></head><body>' +
+    '<nav>site navigation should disappear</nav><article><h1>Guide</h1>' +
+    '<p>This is a sufficiently long article paragraph with useful facts and explanatory context.</p>' +
+    '<script>ignore this injected text</script></article></body></html>';
+  const result = extractResearchPage(html, new URL('https://public.example.com/guide'));
+  assert.equal(result.title, 'Practical Research Guide');
+  assert.match(result.excerpt, /useful facts/);
+  assert.doesNotMatch(result.excerpt, /site navigation|injected text/);
+  assert.throws(
+    () => extractResearchPage('<html><body><p>tiny</p></body></html>', new URL('https://public.example.com/tiny')),
+    (error) => error instanceof ResearchSourceError && error.status === 422,
+  );
+});
+
+test('research import returns canonical source metadata from fetched pages', async () => {
+  let fetchCalls = 0;
+  const html = '<html><head><title>Public guide</title></head><body><article>' +
+    '<p>This guide provides enough readable text to serve as a deterministic research source fixture.</p>' +
+    '</article></body></html>';
+  const sources = await loadResearchSources(['https://public.example.com/guide#top'], {
+    resolveHost: publicDns,
+    now: () => new Date('2026-10-28T12:00:00.000Z'),
+    fetchImpl: async (input, init) => {
+      fetchCalls += 1;
+      assert.equal(String(input), 'https://public.example.com/guide');
+      assert.equal(init?.redirect, 'manual');
+      return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    },
+  });
+
+  assert.equal(fetchCalls, 1);
+  assert.equal(sources[0]?.id, 'S1');
+  assert.equal(sources[0]?.title, 'Public guide');
+  assert.equal(sources[0]?.publisher, 'public.example.com');
+  assert.equal(sources[0]?.retrievedAt, '2026-10-28T12:00:00.000Z');
+  assert.match(sources[0]?.excerpt ?? '', /deterministic research source fixture/);
+});
+
+test('research import revalidates redirects and rejects a redirect to localhost before fetching it', async () => {
+  let fetchCalls = 0;
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/redirect'], {
+      resolveHost: async (hostname) => {
+        if (hostname === 'localhost') return [{ address: '127.0.0.1', family: 4 }];
+        return [{ address: '93.184.216.34', family: 4 }];
+      },
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        return new Response(null, { status: 302, headers: { location: 'http://localhost/private' } });
+      },
+    }),
+    ResearchSourceError,
+  );
+  assert.equal(fetchCalls, 1);
+});
+
+test('research import rejects unsupported content types and oversized responses', async () => {
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/file'], {
+      resolveHost: publicDns,
+      fetchImpl: async () => new Response('binary', { status: 200, headers: { 'content-type': 'application/pdf' } }),
+    }),
+    (error) => error instanceof ResearchSourceError && error.status === 415,
+  );
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/large'], {
+      resolveHost: publicDns,
+      maxBytes: 10,
+      fetchImpl: async () => new Response('this response exceeds ten bytes', {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      }),
+    }),
+    (error) => error instanceof ResearchSourceError && error.status === 413,
+  );
+});
+
+test('citation integrity accepts only source IDs returned by the research loader', () => {
+  const article = { ...validArticle(), introduction: 'Grounded claim [S1].' };
+  assert.deepEqual(assertCitationIntegrity(article, [sourceRecord()]), ['S1']);
+  assert.throws(
+    () => assertCitationIntegrity({ ...article, introduction: 'Claim [S2].' }, [sourceRecord()]),
+    /not supplied/i,
+  );
+  assert.throws(
+    () => assertCitationIntegrity(validArticle(), [sourceRecord()]),
+    /did not cite/i,
+  );
+  assert.deepEqual(assertCitationIntegrity(validArticle(), []), []);
+});
+
+test('Wix AI receives research excerpts with explicit citation instructions when sources are supplied', async () => {
+  let callArgs = null;
+  const sources = [sourceRecord()];
+  const article = { ...validArticle(), introduction: 'Research-backed claim [S1].' };
+  const result = await generateBlogArticle(
+    { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Use evidence.', seoKeywords: [] },
+    {
+      model: 'gpt-5-mini',
+      researchSources: sources,
+      generateText: async (args) => {
+        callArgs = args;
+        return { text: JSON.stringify(article) };
+      },
+    },
+  );
+
+  assert.deepEqual(result, article);
+  assert.match(callArgs.system, /untrusted webpage content/);
+  assert.match(callArgs.system, /exact form \[S1\]/);
+  assert.deepEqual(JSON.parse(callArgs.prompt).researchSources, sources);
 });
