@@ -1,5 +1,3 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
 import type { GeneratedArticle } from './blog-content';
 
 export const MAX_RESEARCH_SOURCES = 5;
@@ -67,7 +65,7 @@ function validateUrlSyntax(value: unknown): URL {
 
   const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
   const unwrappedHost = hostname.replace(/^\[|\]$/g, '');
-  if (!hostname || isIP(unwrappedHost)) {
+  if (!hostname || unwrappedHost.includes(':') || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(unwrappedHost)) {
     throw new ResearchSourceError('Use a public website hostname rather than an IP address.', 400);
   }
   if (
@@ -119,14 +117,48 @@ function isPublicIPv6(address: string): boolean {
 }
 
 function isPublicAddress(address: ResolvedAddress): boolean {
-  const family = address.family || isIP(address.address);
-  if (family === 4) return isPublicIPv4(address.address);
-  if (family === 6) return isPublicIPv6(address.address);
+  if (address.family === 4) return isPublicIPv4(address.address);
+  if (address.family === 6) return isPublicIPv6(address.address);
   return false;
 }
 
-const resolveHostname: ResolveHost = async (hostname) =>
-  lookup(hostname, { all: true, verbatim: true });
+const resolveHostname: ResolveHost = async (hostname) => {
+  const recordTypes = [
+    { type: 1, family: 4 },
+    { type: 28, family: 6 },
+  ] as const;
+
+  const resolved = await Promise.all(recordTypes.map(async (recordType) => {
+    const endpoint = new URL('https://cloudflare-dns.com/dns-query');
+    endpoint.searchParams.set('name', hostname);
+    endpoint.searchParams.set('type', String(recordType.type));
+
+    const response = await fetch(endpoint, {
+      headers: { Accept: 'application/dns-json' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(4_000),
+    });
+    if (!response.ok) throw new Error('Public DNS lookup failed.');
+
+    const payload = await response.json() as {
+      Status?: unknown;
+      Answer?: unknown;
+    };
+    if (payload.Status !== 0 && payload.Status !== 3) {
+      throw new Error('Public DNS lookup returned an unexpected status.');
+    }
+    if (!Array.isArray(payload.Answer)) return [];
+
+    return payload.Answer.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const answer = entry as { type?: unknown; data?: unknown };
+      if (answer.type !== recordType.type || typeof answer.data !== 'string') return [];
+      return [{ address: answer.data, family: recordType.family }];
+    });
+  }));
+
+  return resolved.flat();
+};
 
 /**
  * Validate the URL and resolve its hostname before any outbound request.
