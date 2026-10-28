@@ -188,7 +188,7 @@ function textNode(text: string, decorations: RichTextDecoration[] = []): RichTex
 }
 
 function inlineTextNodes(text: string, citationSources: CitationLink[]): RichTextNode[] {
-  const sourceById = new Map(citationSources.map((source) => [source.id, source.url]));
+  const sourceById = new Map<string, string>(citationSources.map((source) => [source.id, source.url] as const));
   const pattern = /\[S\d+\]|https?:\/\/[^\s<>"']+/g;
   const nodes: RichTextNode[] = [];
   let cursor = 0;

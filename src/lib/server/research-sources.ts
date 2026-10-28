@@ -405,20 +405,18 @@ export async function loadResearchSources(
     throw new ResearchSourceError('Use no more than five research links per article.', 400);
   }
 
-  const sources: ResearchSource[] = [];
-  for (const rawUrl of urls) {
+  return await Promise.all(urls.map(async (rawUrl, index) => {
     const safeUrl = await validateResearchUrl(rawUrl, config.resolveHost);
     const page = await fetchResearchPage(safeUrl, config);
-    sources.push({
-      id: 'S' + (sources.length + 1),
+    return {
+      id: 'S' + (index + 1),
       title: page.title,
       url: page.url.href,
       publisher: page.url.hostname.replace(/^www\./, ''),
       retrievedAt: config.now().toISOString(),
       excerpt: page.excerpt,
-    });
-  }
-  return sources;
+    };
+  }));
 }
 
 export function assertCitationIntegrity(
