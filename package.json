@@ -13,7 +13,9 @@
     "generate": "wix generate",
     "skills": "wix skills",
     "typecheck": "astro check",
-    "test": "vitest run"
+    "test": "npm run test:auth && npm run test:workflow",
+    "test:auth": "vitest run tests/auth-signoff.test.ts",
+    "test:workflow": "node --experimental-strip-types --test tests/workflow.test.mjs"
   },
   "dependencies": {
     "@wix/ai-credits": "^1.0.10",
@@ -26,7 +28,12 @@
     "@wix/site-location": "^1.34.0",
     "@wix/site-members": "^1.0.0",
     "astro": "^5.18.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@wix/ai": "^1.0.0",
+    "@wix/app-management": "^1.0.171",
+    "@wix/blog": "^1.0.687",
+    "ai": "^6.0.26",
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
@@ -36,7 +43,7 @@
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@wix/astro-wix-hosting-adapter": "^2.0.4",
-    "@wix/cli": "^1.1.257",
+    "@wix/cli": "^1.2.2",
     "@wix/sdk-types": "^1.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

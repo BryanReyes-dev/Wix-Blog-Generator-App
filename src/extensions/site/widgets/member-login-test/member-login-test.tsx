@@ -2,6 +2,7 @@ import { httpClient } from "@wix/essentials";
 import { location } from "@wix/site-location";
 import { authentication, currentMember } from "@wix/site-members";
 import styles from "./member-login-test.module.css";
+import { mountBlogWorkflow } from './blog-workflow';
 
 const ROUTES = {
   login: "/admin",
@@ -217,12 +218,7 @@ class MemberLoginTest extends HTMLElement {
         return;
       }
 
-      this.renderMessage(
-        "AI Blog Generator",
-        "Access approved. This protected page is ready for the blog-generation workflow interface.",
-        false,
-        true,
-      );
+      this.renderWorkflowPage();
       return;
     }
 
@@ -237,6 +233,13 @@ class MemberLoginTest extends HTMLElement {
       false,
       true,
     );
+  }
+
+  private renderWorkflowPage() {
+    mountBlogWorkflow(this, async () => {
+      await authentication.logout();
+      location.to(ROUTES.login);
+    });
   }
 
   private renderMessage(title: string, message: string, showRetry = false, showSignOut = false) {

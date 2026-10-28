@@ -5,8 +5,8 @@ export default extensions.customElement({
   name: "Member Login Test",
 
   width: {
-    defaultWidth: 360,
-    allowStretch: false,
+    defaultWidth: 900,
+    allowStretch: true,
   },
 
   height: {

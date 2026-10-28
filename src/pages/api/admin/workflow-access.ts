@@ -1,18 +1,17 @@
 import type { APIRoute } from 'astro';
 import { items } from '@wix/data';
-import { auth } from '@wix/essentials';
 import {
   handleApiError,
   isMemberApproved,
   isWixGuid,
   jsonResponse,
-  requireDashboardUser,
+  requireWorkflowAdministrator,
   WORKFLOW_ACCESS_COLLECTION_ID,
 } from '../../../lib/server/access-control';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const administrator = await requireDashboardUser();
+    const administrator = await requireWorkflowAdministrator();
 
     let body: unknown;
     try {
@@ -32,16 +31,14 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     if (enabled) {
-      const save = auth.elevate(items.save);
-      await save(WORKFLOW_ACCESS_COLLECTION_ID, {
+      await items.save(WORKFLOW_ACCESS_COLLECTION_ID, {
         _id: memberId,
         memberId,
         grantedBy: administrator.userId,
         grantedAt: new Date().toISOString(),
       });
     } else if (await isMemberApproved(memberId)) {
-      const remove = auth.elevate(items.remove);
-      await remove(WORKFLOW_ACCESS_COLLECTION_ID, memberId);
+      await items.remove(WORKFLOW_ACCESS_COLLECTION_ID, memberId);
     }
 
     return jsonResponse({ memberId, approved: enabled });
