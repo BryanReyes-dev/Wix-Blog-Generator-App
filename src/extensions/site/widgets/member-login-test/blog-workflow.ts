@@ -380,8 +380,9 @@ async function imageReference(file: File): Promise<MediaFrame> {
   const objectUrl = URL.createObjectURL(file);
   const image = new Image();
   try {
+    const loaded = waitForEvent(image, 'load', 'error');
     image.src = objectUrl;
-    await waitForEvent(image, 'load', 'error');
+    await loaded;
     return canvasJpeg(image, image.naturalWidth, image.naturalHeight, 'Image');
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -394,10 +395,12 @@ async function videoReferenceFrames(file: File, maxFrames: number): Promise<Medi
   video.preload = 'metadata';
   video.muted = true;
   video.playsInline = true;
-  video.src = objectUrl;
 
   try {
-    await waitForEvent(video, 'loadedmetadata', 'error');
+    const metadataLoaded = waitForEvent(video, 'loadedmetadata', 'error');
+    video.src = objectUrl;
+    video.load();
+    await metadataLoaded;
     if (!Number.isFinite(video.duration) || video.duration <= 0 || !video.videoWidth || !video.videoHeight) {
       throw new Error('This video has no readable visual frames.');
     }
@@ -661,6 +664,7 @@ export function mountBlogWorkflow(
     researchLinks.forEach((entry, index) => {
       const row = element('div', styles.researchLinkRow);
       const fields = element('div', styles.researchLinkFields);
+      const urlField = element('div', styles.workflowField);
       const urlLabel = element('label', styles.workflowLabel);
       const urlInput = element('input', styles.workflowInput);
       const urlId = 'research-url-' + entry.id;
@@ -672,12 +676,16 @@ export function mountBlogWorkflow(
       urlInput.maxLength = 2_048;
       urlInput.placeholder = 'https://example.com/article';
       urlInput.value = entry.url;
+      urlField.append(urlLabel, urlInput);
+
+      const noteField = element('div', styles.workflowField);
       const noteLabel = element('label', styles.workflowLabel);
       const noteInput = makeTextArea('research-note-' + entry.id, 'Optional: what should the model focus on in this source?', 2, 500);
       noteLabel.htmlFor = noteInput.id;
       noteLabel.textContent = 'Source focus note (optional)';
       noteInput.value = entry.notes;
-      fields.append(urlLabel, urlInput, noteLabel, noteInput);
+      noteField.append(noteLabel, noteInput);
+      fields.append(urlField, noteField);
 
       const remove = makeActionButton('×', styles.iconButton);
       remove.setAttribute('aria-label', 'Remove research link ' + (index + 1));
