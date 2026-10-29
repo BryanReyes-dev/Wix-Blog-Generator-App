@@ -1,10 +1,10 @@
-const LOCAL_ORIGIN_PATTERN = /^https?:\\/\\/(?:(?:[^:]+\\.)?localhost|127\\.0\\.0\\.1|\\[::1\\])(?::\\d+)?$/i;
+const LOCAL_ORIGIN_PATTERN = /^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i;
 
 const WIX_ORIGIN_PATTERNS = [
-  /^https:\\/\\/(?:[a-z0-9-]+\\.)*wix\\.com$/i,
-  /^https:\\/\\/(?:[a-z0-9-]+\\.)*wixsite\\.com$/i,
-  /^https:\\/\\/(?:[a-z0-9-]+\\.)*wixstudio\\.io$/i,
-  /^https:\\/\\/(?:[a-z0-9-]+\\.)*wix\\.run$/i,
+  /^https:\/\/(?:[a-z0-9-]+\.)*wix\.com$/i,
+  /^https:\/\/(?:[a-z0-9-]+\.)*wixsite\.com$/i,
+  /^https:\/\/(?:[a-z0-9-]+\.)*wixstudio\.io$/i,
+  /^https:\/\/(?:[a-z0-9-]+\.)*wix\.run$/i,
 ];
 
 function parseExplicitOrigins(value) {
