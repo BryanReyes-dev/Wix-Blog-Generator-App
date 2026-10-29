@@ -577,6 +577,9 @@
 .visitorBody h4 { font-size: 17px; }
 .visitorBody p { margin: 0 0 1em; }
 .visitorBody ul { padding-left: 1.4em; margin: 0 0 1em; }
+.visitorBody blockquote { margin: 1.2em 0; padding: 0.15em 0 0.15em 1em; border-left: 3px solid var(--border-strong); color: var(--text); }
+.visitorBody strong { color: var(--text); font-weight: 750; }
+.visitorBody em { font-style: italic; }
 .visitorBody a,
 .researchSourceList a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .visitorBody sup { margin-left: 2px; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 0.72em; }
