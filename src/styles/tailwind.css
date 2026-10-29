@@ -1,0 +1,5 @@
+/*
+ * Tailwind utilities only: intentionally omit Tailwind's preflight/base reset.
+ * The widget is embedded into a Wix-owned page, so it must not reset host-page styles.
+ */
+@tailwind utilities;
