@@ -745,8 +745,8 @@ export function mountBlogWorkflow(
     researchLinks.push({ id: makeId(), url: '', notes: '' });
     renderResearchLinks();
     persistPreferences();
-    const last = researchLinkList.querySelector<HTMLInputElement>('input[type="url"]:last-of-type');
-    last?.focus();
+    const urlInputs = researchLinkList.querySelectorAll<HTMLInputElement>('input[type="url"]');
+    urlInputs.item(urlInputs.length - 1)?.focus();
   });
   renderResearchLinks();
 
@@ -954,9 +954,8 @@ export function mountBlogWorkflow(
       createButton.disabled = true;
       createButton.textContent = 'Saving draft…';
       setStatus('Checking Wix Blog and saving the unpublished draft…');
-      currentSubmissionId ??= makeSubmissionId();
-
       try {
+        currentSubmissionId ??= makeSubmissionId();
         const result = await postJson<ApiSuccess<{ draft: { draftId: string; status: string } }>>(
           '/api/workflow/drafts',
           {
