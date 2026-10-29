@@ -27,7 +27,14 @@ export default defineConfig({
           if (!allowed && origin) {
             console.warn('[dev-cors] Rejected browser Origin:', origin);
           }
-          callback(null, allowed);
+
+          // Vite's CORS middleware accepts null for the no-error callback.
+          // Its exposed type currently requires Error, so narrow the callback
+          // through unknown to express the runtime contract without changing it.
+          const corsCallback = /** @type {(error: Error | null, origin: string | boolean) => void} */ (
+            /** @type {unknown} */ (callback)
+          );
+          corsCallback(null, allowed);
         },
       },
     },
