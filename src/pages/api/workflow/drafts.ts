@@ -69,6 +69,12 @@ export const POST: APIRoute = async ({ request }) => {
 
     const submission = parseDraftSubmission(body);
     const input = body as Record<string, unknown>;
+    if (typeof input.generatedByMemberId !== 'string' || input.generatedByMemberId !== member.memberId) {
+      throw new ApiError(
+        403,
+        'Only the Wix member who generated this article can save it as a draft. Sign in with the original account and generate the article again if needed.',
+      );
+    }
     const citationSources = parseResearchCitationSources(input.researchSources);
     const richContent = bodyToRichContent(submission.body, citationSources);
 
