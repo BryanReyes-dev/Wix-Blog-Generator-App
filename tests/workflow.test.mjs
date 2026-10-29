@@ -395,9 +395,9 @@ test('citation integrity accepts only source IDs returned by the research loader
   assert.deepEqual(assertCitationIntegrity(validArticle(), []), []);
 });
 
-test('Wix AI receives research excerpts with explicit citation instructions when sources are supplied', async () => {
+test('Wix AI receives research excerpts and per-link focus notes when sources are supplied', async () => {
   let callArgs = null;
-  const sources = [sourceRecord()];
+  const sources = [{ ...sourceRecord(), userNotes: 'Focus on the official recommendation rather than general background.' }];
   const article = { ...validArticle(), introduction: 'Research-backed claim [S1].' };
   const result = await generateBlogArticle(
     { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Use evidence.', seoKeywords: [] },
@@ -415,6 +415,7 @@ test('Wix AI receives research excerpts with explicit citation instructions when
   assert.match(callArgs.system, /untrusted webpage content/);
   assert.match(callArgs.system, /exact form \[S1\]/);
   assert.deepEqual(JSON.parse(callArgs.prompt).researchSources, sources);
+  assert.match(JSON.parse(callArgs.prompt).researchSources[0].userNotes, /official recommendation/);
 });
 
 
