@@ -423,15 +423,18 @@ test('editor Markdown emphasis, lists, and quotes convert to Wix rich-content no
   const document = bodyToRichContent(
     '## Format test\n\n**Bold words** and *italic words*.\n\n- First item\n- Second item\n\n> A quoted sentence.',
   );
-  const heading = document.nodes.find((node) => node.type === 'HEADING');
-  const bold = document.nodes.flatMap((node) => node.nodes ?? [])
-    .flatMap((node) => node.nodes ?? [])
-    .find((node) => node.textData?.text === 'Bold words');
-  const italic = document.nodes.flatMap((node) => node.nodes ?? [])
-    .flatMap((node) => node.nodes ?? [])
-    .find((node) => node.textData?.text === 'italic words');
-  const list = document.nodes.find((node) => node.type === 'BULLETED_LIST');
-  const quote = document.nodes.find((node) => node.type === 'BLOCKQUOTE');
+  const allNodes = [];
+  const visit = (node) => {
+    allNodes.push(node);
+    for (const child of node.nodes ?? []) visit(child);
+  };
+  document.nodes.forEach(visit);
+
+  const heading = allNodes.find((node) => node.type === 'HEADING');
+  const bold = allNodes.find((node) => node.textData?.text === 'Bold words');
+  const italic = allNodes.find((node) => node.textData?.text === 'italic words');
+  const list = allNodes.find((node) => node.type === 'BULLETED_LIST');
+  const quote = allNodes.find((node) => node.type === 'BLOCKQUOTE');
 
   assert.equal(heading?.type, 'HEADING');
   assert.equal(bold?.textData?.decorations.some((decoration) => decoration.type === 'BOLD'), true);
