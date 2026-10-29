@@ -8,10 +8,11 @@ This Wix CLI/Astro app gives approved site members a basic workflow for generati
 2. The protected `/admin/workflow` page checks the signed-in member and their approval through a server endpoint.
 3. The member submits a topic, audience, tone, instructions, and optional SEO keywords.
 4. The server calls the Wix AI SDK, then validates the returned article on the server.
-5. Members can optionally paste up to five public webpage URLs. The server checks the destination, retrieves a bounded HTML or plain-text excerpt, and passes those excerpts to Wix AI as untrusted research material.
-6. The server checks generated citation markers against the retrieved source IDs, and the editor shows the source URLs alongside a live, visitor-style article preview.
-7. The member reviews and edits the title and article body.
-8. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
+5. Members can add up to five public webpage URLs with optional per-link focus notes. The server checks each destination, retrieves a bounded HTML or plain-text excerpt, and passes the excerpts and focus notes to Wix AI.
+6. Members can attach up to four local image/video references. Images are resized to JPEG frames in the browser; videos are sampled into up to three still frames each. The frames and optional notes are sent to Wix AI for visual context. Video audio is not analyzed, originals are not stored by this app, and media is not automatically embedded into the final blog post.
+7. The server checks generated citation markers against the retrieved source IDs, and the editor shows source URLs alongside a live, visitor-style article preview.
+8. The member edits the title, article body, meta description, and SEO keywords before saving.
+9. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
 
 Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
 
@@ -64,7 +65,7 @@ Separate multiple exact origins with commas. Do not include URL paths, and do no
 
 Research-link import currently accepts up to five URLs to public HTML or plain-text pages. It rejects IP-literal and local/private destinations, rechecks redirects, applies a ten-second fetch timeout and a one-megabyte response cap, and provides source IDs for inline citations. Generated source markers are mapped to Ricos link decorations when saving a draft. Webpage excerpts are untrusted content; the generation prompt instructs the model to treat them as research rather than instructions.
 
-The preview is a local approximation of the article's headings, paragraphs, lists, citations, and links. Wix's published blog theme still controls final presentation. General search-engine discovery, PDF/document ingestion, and media uploads are not implemented in this slice; contributors must paste public webpage URLs.
+The preview is a local approximation of the article's headings, paragraphs, lists, citations, and links. Wix's published blog theme still controls final presentation. The workflow UI is full-width and responsive, defaults to dark mode, and offers a saved light-mode preference. Text preferences and source-link notes are stored in browser local storage scoped to the verified Wix member ID; selected media files are session-only and are not persisted. General search-engine discovery, PDF/document ingestion, direct upload to Wix Media Manager, and automatic media embedding in draft posts are not implemented in this slice.
 
 ## Important limitations
 
