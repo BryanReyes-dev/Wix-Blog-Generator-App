@@ -40,7 +40,7 @@ export const GET: APIRoute = async () => {
     });
 
     return jsonResponse({
-      error: 'The server could not read workflow approval records. Check the local wix dev terminal for [workflow-access] diagnostics. Access remains blocked.',
+      error: 'The server could not read workflow approval records. Check server logs for [workflow-access] diagnostics. Access remains blocked.',
     }, 503);
   }
 };
