@@ -13,7 +13,7 @@ export const GET: APIRoute = async () => {
     const authorized = await isMemberApproved(member.memberId);
 
     // This endpoint reveals only the caller's own approval state.
-    return jsonResponse({ authorized });
+    return jsonResponse({ authorized, memberId: member.memberId });
   } catch (error) {
     if (error instanceof ApiError) return handleApiError(error);
 
