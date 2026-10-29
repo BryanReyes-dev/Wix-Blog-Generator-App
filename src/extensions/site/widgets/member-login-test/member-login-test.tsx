@@ -12,7 +12,7 @@ const ROUTES = {
 
 type AccessCheck =
   | { state: "signed-out"; memberExists: false }
-  | { state: "approved" | "denied"; memberExists: true }
+  | { state: "approved" | "denied"; memberExists: true; memberId: string }
   | { state: "unavailable"; memberExists: boolean; reason?: string };
 
 class MemberLoginTest extends HTMLElement {
@@ -170,8 +170,8 @@ class MemberLoginTest extends HTMLElement {
         return { state: "unavailable", memberExists: true, reason };
       }
 
-      const result = (await response.json()) as { authorized?: unknown };
-      if (typeof result.authorized !== "boolean") {
+      const result = (await response.json()) as { authorized?: unknown; memberId?: unknown };
+      if (typeof result.authorized !== "boolean" || typeof result.memberId !== "string" || !result.memberId) {
         return {
           state: "unavailable",
           memberExists: true,
@@ -180,8 +180,8 @@ class MemberLoginTest extends HTMLElement {
       }
 
       return result.authorized
-        ? { state: "approved", memberExists: true }
-        : { state: "denied", memberExists: true };
+        ? { state: "approved", memberExists: true, memberId: result.memberId }
+        : { state: "denied", memberExists: true, memberId: result.memberId };
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 120) : "network error";
       return {
@@ -238,7 +238,7 @@ class MemberLoginTest extends HTMLElement {
         return;
       }
 
-      this.renderWorkflowPage();
+      void this.renderWorkflowPage(check.memberId);
       return;
     }
 
@@ -255,11 +255,32 @@ class MemberLoginTest extends HTMLElement {
     );
   }
 
-  private renderWorkflowPage() {
-    mountBlogWorkflow(this, async () => {
-      await authentication.logout();
-      location.to(ROUTES.login);
-    });
+  private async renderWorkflowPage(memberId: string) {
+    let displayName = "Wix member";
+    try {
+      const member = await currentMember.getMember();
+      const details = member as unknown as {
+        profile?: { nickname?: string | null; firstName?: string | null; lastName?: string | null };
+        contactDetails?: { firstName?: string | null; lastName?: string | null };
+      };
+      const profileName = details.profile?.nickname?.trim();
+      const fullName = [
+        details.contactDetails?.firstName ?? details.profile?.firstName,
+        details.contactDetails?.lastName ?? details.profile?.lastName,
+      ].filter((part): part is string => typeof part === "string" && Boolean(part.trim())).join(" ").trim();
+      displayName = profileName || fullName || displayName;
+    } catch {
+      // The verified member ID is still supplied by the approval endpoint.
+    }
+
+    mountBlogWorkflow(
+      this,
+      async () => {
+        await authentication.logout();
+        location.to(ROUTES.login);
+      },
+      { memberId, displayName },
+    );
   }
 
   private renderMessage(title: string, message: string, showRetry = false, showSignOut = false) {
