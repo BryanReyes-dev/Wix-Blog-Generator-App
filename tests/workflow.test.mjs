@@ -18,6 +18,7 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
 import {
   assertCitationIntegrity,
   extractResearchPage,
@@ -453,4 +454,27 @@ test('draft citation-source parsing rejects forged IDs, invalid schemes, and dup
     ]),
     /unique IDs/i,
   );
+});
+
+
+test('local Wix development CORS permits localhost and known Wix-managed origins only', () => {
+  assert.equal(isAllowedDevCorsOrigin('http://localhost:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('http://127.0.0.1:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('http://[::1]:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://mysite.editor.wix.com'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://username.wixsite.com'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://mysite.wixstudio.io'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://012509d2-64ed-4670-bc27-8299e942673f.wix.run'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://wix.com.attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('http://malicious.wix.com'), false);
+});
+
+test('custom development origins must be explicitly configured as exact HTTPS origins', () => {
+  const customOrigin = 'https://my-custom-development-domain.example';
+  assert.equal(isAllowedDevCorsOrigin(customOrigin), false);
+  assert.equal(isAllowedDevCorsOrigin(customOrigin, customOrigin), true);
+  assert.equal(isAllowedDevCorsOrigin('https://another-domain.example', customOrigin), false);
+  assert.throws(() => getAllowedDevCorsOrigins('https://my-domain.example/path'), /exact HTTPS origins/);
+  assert.throws(() => getAllowedDevCorsOrigins('http://my-domain.example'), /exact HTTPS origins/);
 });

@@ -50,6 +50,16 @@ npm run build
 
 Then run the app on the Wix development site. Test generation as an approved site member, verify that an unapproved member is rejected, review/edit a generated article, and confirm the final action creates an **unpublished** Wix Blog draft. Confirm the Wix AI model permission and available credits. Verify the owner/installing-user billing behavior before treating the credit requirement as proven.
 
+### Local development CORS
+
+The site widget calls the local Astro server from a Wix-hosted page, so those requests are cross-origin during `wix dev`. The dev server allows localhost and HTTPS origins under Wix-managed `wix.com`, `wixsite.com`, `wixstudio.io`, and `wix.run` domains. If the development site is being viewed through a custom domain, set its exact origin when starting the dev server:
+
+```sh
+WIX_DEV_CORS_ORIGINS="https://your-development-domain.example" npm run dev
+```
+
+Separate multiple exact origins with commas. Do not include URL paths, and do not set Vite CORS to allow every origin. These CORS rules apply to the local Vite dev server only, not production hosting.
+
 ## Research links and article preview
 
 Research-link import currently accepts up to five URLs to public HTML or plain-text pages. It rejects IP-literal and local/private destinations, rechecks redirects, applies a ten-second fetch timeout and a one-megabyte response cap, and provides source IDs for inline citations. Generated source markers are mapped to Ricos link decorations when saving a draft. Webpage excerpts are untrusted content; the generation prompt instructs the model to treat them as research rather than instructions.
