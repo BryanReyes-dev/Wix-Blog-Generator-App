@@ -465,10 +465,14 @@ test('local Wix development CORS permits localhost and known Wix-managed origins
   assert.equal(isAllowedDevCorsOrigin('https://username.wixsite.com'), true);
   assert.equal(isAllowedDevCorsOrigin('https://mysite.wixstudio.io'), true);
   assert.equal(isAllowedDevCorsOrigin('https://012509d2-64ed-4670-bc27-8299e942673f.wix.run'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org'), true);
   assert.equal(isAllowedDevCorsOrigin('https://attacker.example'), false);
   assert.equal(isAllowedDevCorsOrigin('https://wix.com.attacker.example'), false);
   assert.equal(isAllowedDevCorsOrigin('https://unrelated.wix.com'), false);
   assert.equal(isAllowedDevCorsOrigin('https://nested.username.wixsite.com'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://nested.dev-sitex1487338744.wixdev-sites.org'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org.attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://customer.wixdev-sites.org'), false);
   assert.equal(isAllowedDevCorsOrigin('http://malicious.wix.com'), false);
 });
 
