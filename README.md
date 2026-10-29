@@ -58,7 +58,7 @@ The site widget calls the local Astro server from a Wix-hosted page, so those re
 WIX_DEV_CORS_ORIGINS="https://your-development-domain.example" npm run dev
 ```
 
-Separate multiple exact origins with commas. Do not include URL paths, and do not set Vite CORS to allow every origin. These CORS rules apply to the local Vite dev server only, not production hosting.
+Separate multiple exact origins with commas. Do not include URL paths, and do not set Vite CORS to allow every origin. These CORS rules apply to the local Vite dev server only, not production hosting. The widget derives its HTTP endpoint base URL from the runtime module origin rather than hard-coding `localhost`: local development resolves to the local server, while a deployed app resolves to its deployed app origin. This follows Wix CLI's documented frontend-to-HTTP-endpoint pattern.
 
 ## Research links and article preview
 
