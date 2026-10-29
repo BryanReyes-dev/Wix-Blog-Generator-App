@@ -9,14 +9,14 @@ import { getAllowedDevCorsOrigins } from './src/lib/dev-cors.mjs';
 // running `wix dev`. Allow known Wix-managed HTTPS origins, localhost, and
 // any explicitly configured custom development origin. This is Vite dev-server
 // CORS only; it does not configure the production hosting adapter.
-const allowedDevCorsOrigins = getAllowedDevCorsOrigins(process.env.WIX_DEV_CORS_ORIGINS);
+const runtimeEnvironment = /** @type {typeof globalThis & { process?: { env?: Record<string, string | undefined> } }} */ (globalThis);
+const allowedDevCorsOrigins = getAllowedDevCorsOrigins(runtimeEnvironment.process?.env?.WIX_DEV_CORS_ORIGINS);
 
 export default defineConfig({
   output: "server",
   adapter: wixHostingAdapter(),
   integrations: [wix(), react()],
   image: { domains: ["static.wixstatic.com"] },
-  security: { checkOrigin: false },
   devToolbar: { enabled: false },
   vite: {
     server: {

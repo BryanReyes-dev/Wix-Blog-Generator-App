@@ -36,16 +36,7 @@ async function verifyWixBlogInstalled(): Promise<void> {
     );
   }
 
-  console.info(
-    '[blog-install-check] App Instance:',
-    appInstance,
-  );
-
   const installedApps = appInstance.site?.installedWixApps;
-  console.info(
-    '[blog-install-check] installedWixApps:',
-    installedApps,
-  );
   if (!Array.isArray(installedApps)) {
     throw new ApiError(
       503,
