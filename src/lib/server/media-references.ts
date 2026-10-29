@@ -64,7 +64,7 @@ export function parseMediaReferences(value: unknown): MediaReference[] {
       throw new InputValidationError(`Reference files may contain no more than ${MAX_MEDIA_FRAMES} visual frames in total.`);
     }
 
-    const validFrames = frames.map((frame, frameIndex): MediaReferenceFrame => {
+    const validFrames = frames.map((frame): MediaReferenceFrame => {
       if (!frame || typeof frame !== 'object' || Array.isArray(frame)) {
         throw new InputValidationError(`A visual frame in ${name} is invalid.`);
       }
