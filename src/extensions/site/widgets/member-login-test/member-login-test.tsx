@@ -13,7 +13,7 @@ const ROUTES = {
 type AccessCheck =
   | { state: "signed-out"; memberExists: false }
   | { state: "approved" | "denied"; memberExists: true }
-  | { state: "unavailable"; memberExists: boolean };
+  | { state: "unavailable"; memberExists: boolean; reason?: string };
 
 class MemberLoginTest extends HTMLElement {
   connectedCallback() {
@@ -134,8 +134,8 @@ class MemberLoginTest extends HTMLElement {
 
       case "unavailable":
         status.textContent = check.memberExists
-          ? "You are signed in, but approval could not be verified. Access remains blocked; retry or sign out."
-          : "Your member session or approval could not be verified. Retry the check or sign in again.";
+          ? `You are signed in, but approval could not be verified.${check.reason ? ` Details: ${check.reason}` : ""} Access remains blocked; retry or sign out.`
+          : `Your member session or approval could not be verified.${check.reason ? ` Details: ${check.reason}` : ""} Retry the check or sign in again.`;
         authButton.textContent = check.memberExists ? "Sign out" : "Sign in with Wix";
         authButton.dataset.authAction = check.memberExists ? "sign-out" : "sign-in";
         retryButton.hidden = false;
@@ -157,18 +157,38 @@ class MemberLoginTest extends HTMLElement {
     try {
       const apiUrl = new URL(import.meta.url).origin + "/api/workflow-access";
       const response = await httpClient.fetchWithAuth(apiUrl);
-      if (!response.ok) return { state: "unavailable", memberExists: true };
+      if (!response.ok) {
+        let reason = `Approval API returned HTTP ${response.status}.`;
+        try {
+          const payload = await response.json() as { error?: unknown };
+          if (typeof payload.error === "string" && payload.error.trim()) {
+            reason = payload.error.trim().slice(0, 220);
+          }
+        } catch {
+          // Use the HTTP status when the response isn't JSON.
+        }
+        return { state: "unavailable", memberExists: true, reason };
+      }
 
       const result = (await response.json()) as { authorized?: unknown };
       if (typeof result.authorized !== "boolean") {
-        return { state: "unavailable", memberExists: true };
+        return {
+          state: "unavailable",
+          memberExists: true,
+          reason: "The approval API returned an unexpected response. Check the local server log.",
+        };
       }
 
       return result.authorized
         ? { state: "approved", memberExists: true }
         : { state: "denied", memberExists: true };
-    } catch {
-      return { state: "unavailable", memberExists: true };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.slice(0, 120) : "network error";
+      return {
+        state: "unavailable",
+        memberExists: true,
+        reason: `Could not reach the local approval API (${detail}). Check the browser Console and the wix dev terminal for CORS errors.`,
+      };
     }
   }
 
