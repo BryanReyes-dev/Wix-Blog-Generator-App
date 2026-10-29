@@ -317,16 +317,6 @@ async function postJson<T>(path: string, payload: unknown): Promise<T> {
   return await response.json() as T;
 }
 
-function renderKeywords(parent: HTMLElement, keywords: string[]) {
-  const list = element('ul', styles.keywordList);
-  for (const keyword of keywords) {
-    const item = element('li');
-    item.textContent = keyword;
-    list.appendChild(item);
-  }
-  parent.appendChild(list);
-}
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
