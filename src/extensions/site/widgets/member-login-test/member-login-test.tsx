@@ -307,7 +307,7 @@ function MemberLoginApp() {
   };
 
   return (
-    <div className="box-border w-full min-w-0 bg-[#0a0d13] p-3 font-sans text-[#f1f5fb] sm:p-4">
+    <div className="tw-widget box-border w-full min-w-0 bg-[#0a0d13] p-3 font-sans text-[#f1f5fb] sm:p-4">
       {screen.kind === "loading" ? (
         <AccessPanel title={screen.title} message={screen.message} />
       ) : null}

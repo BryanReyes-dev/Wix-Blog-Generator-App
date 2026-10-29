@@ -11,6 +11,11 @@ on:
     paths:
       - "src/lib/server/**"
       - "src/pages/api/**"
+      - "src/extensions/site/widgets/member-login-test/**"
+      - "src/styles/**"
+      - "tailwind.config.cjs"
+      - "postcss.config.cjs"
+      - "astro.config.mjs"
       - "tests/**"
       - "package.json"
       - "package-lock.json"

@@ -1,5 +1,35 @@
 /*
- * Tailwind utilities only: intentionally omit Tailwind's preflight/base reset.
- * The widget is embedded into a Wix-owned page, so it must not reset host-page styles.
+ * Keep Tailwind's utility classes scoped to this widget. Intentionally omit
+ * preflight so rendering the widget doesn't reset the surrounding Wix page.
  */
+.tw-widget,
+.tw-widget *,
+.tw-widget::before,
+.tw-widget::after,
+.tw-widget *::before,
+.tw-widget *::after {
+  box-sizing: border-box;
+}
+
+.tw-widget * {
+  border-style: solid;
+}
+
+.tw-widget {
+  --tw-ring-inset: ;
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: rgb(59 130 246 / 0.5);
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+}
+
+.tw-widget button,
+.tw-widget input,
+.tw-widget textarea {
+  margin: 0;
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
 @tailwind utilities;
