@@ -419,6 +419,27 @@ test('Wix AI receives research excerpts and per-link focus notes when sources ar
 });
 
 
+test('editor Markdown emphasis, lists, and quotes convert to Wix rich-content nodes', () => {
+  const document = bodyToRichContent(
+    '## Format test\n\n**Bold words** and *italic words*.\n\n- First item\n- Second item\n\n> A quoted sentence.',
+  );
+  const heading = document.nodes.find((node) => node.type === 'HEADING');
+  const bold = document.nodes.flatMap((node) => node.nodes ?? [])
+    .flatMap((node) => node.nodes ?? [])
+    .find((node) => node.textData?.text === 'Bold words');
+  const italic = document.nodes.flatMap((node) => node.nodes ?? [])
+    .flatMap((node) => node.nodes ?? [])
+    .find((node) => node.textData?.text === 'italic words');
+  const list = document.nodes.find((node) => node.type === 'BULLETED_LIST');
+  const quote = document.nodes.find((node) => node.type === 'BLOCKQUOTE');
+
+  assert.equal(heading?.type, 'HEADING');
+  assert.equal(bold?.textData?.decorations.some((decoration) => decoration.type === 'BOLD'), true);
+  assert.equal(italic?.textData?.decorations.some((decoration) => decoration.type === 'ITALIC'), true);
+  assert.equal(list?.nodes?.filter((node) => node.type === 'LIST_ITEM').length, 2);
+  assert.equal(quote?.nodes?.[0]?.type, 'PARAGRAPH');
+});
+
 test('draft rich content turns verified citation markers and source URLs into real Ricos links', () => {
   const source = {
     id: 'S1',
