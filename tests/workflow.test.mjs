@@ -18,6 +18,18 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
+import { MAX_MEDIA_FRAMES, parseMediaReferences } from '../src/lib/server/media-references.ts';
+import {
+  assertCitationIntegrity,
+  extractResearchPage,
+  loadResearchSources,
+  parseResearchCitationSources,
+  parseResearchLinkEntries,
+  parseResearchUrls,
+  ResearchSourceError,
+  validateResearchUrl,
+} from '../src/lib/server/research-sources.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -244,4 +256,350 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
+});
+
+
+const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+const sourceRecord = (id = 'S1') => ({
+  id,
+  title: 'Public research article',
+  url: 'https://public.example.com/article',
+  publisher: 'public.example.com',
+  retrievedAt: '2026-10-28T12:00:00.000Z',
+  excerpt: 'A sufficiently long public research excerpt for our deterministic tests.',
+});
+
+test('research URLs accept a short public URL list and reject unsafe, duplicate, and excessive inputs', () => {
+  assert.deepEqual(
+    parseResearchUrls('https://public.example.com/a\n\nhttps://public.example.org/b'),
+    ['https://public.example.com/a', 'https://public.example.org/b'],
+  );
+  assert.deepEqual(parseResearchUrls(''), []);
+  assert.throws(() => parseResearchUrls('file:///etc/passwd'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('http://localhost/admin'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('https://user:pass@public.example.com/a'), ResearchSourceError);
+  assert.throws(() => parseResearchUrls('https://public.example.com/a\nhttps://public.example.com/a'), /duplicate/i);
+  assert.throws(() => parseResearchUrls(Array.from({ length: 6 }, (_, index) => 'https://source' + index + '.example.com/a')), /no more than five/i);
+});
+
+test('research URL validation removes fragments and rejects private or mixed DNS results', async () => {
+  const url = await validateResearchUrl('https://public.example.com/story#section', publicDns);
+  assert.equal(url.href, 'https://public.example.com/story');
+
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [{ address: '127.0.0.1', family: 4 }]),
+    ResearchSourceError,
+  );
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '10.0.0.12', family: 4 },
+    ]),
+    /public internet addresses/i,
+  );
+  await assert.rejects(
+    validateResearchUrl('https://public.example.com/story', async () => [{ address: '::1', family: 6 }]),
+    ResearchSourceError,
+  );
+});
+
+test('research page extraction preserves article text and strips scripts and navigation', () => {
+  const html = '<html><head><title>Practical Research Guide</title></head><body>' +
+    '<nav>site navigation should disappear</nav><article><h1>Guide</h1>' +
+    '<p>This is a sufficiently long article paragraph with useful facts and explanatory context.</p>' +
+    '<script>ignore this injected text</script></article></body></html>';
+  const result = extractResearchPage(html, new URL('https://public.example.com/guide'));
+  assert.equal(result.title, 'Practical Research Guide');
+  assert.match(result.excerpt, /useful facts/);
+  assert.doesNotMatch(result.excerpt, /site navigation|injected text/);
+  assert.throws(
+    () => extractResearchPage('<html><body><p>tiny</p></body></html>', new URL('https://public.example.com/tiny')),
+    (error) => error instanceof ResearchSourceError && error.status === 422,
+  );
+});
+
+test('research import returns canonical source metadata from fetched pages', async () => {
+  let fetchCalls = 0;
+  const html = '<html><head><title>Public guide</title></head><body><article>' +
+    '<p>This guide provides enough readable text to serve as a deterministic research source fixture.</p>' +
+    '</article></body></html>';
+  const sources = await loadResearchSources(['https://public.example.com/guide#top'], {
+    resolveHost: publicDns,
+    now: () => new Date('2026-10-28T12:00:00.000Z'),
+    fetchImpl: async (input, init) => {
+      fetchCalls += 1;
+      assert.equal(String(input), 'https://public.example.com/guide');
+      assert.equal(init?.redirect, 'manual');
+      return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    },
+  });
+
+  assert.equal(fetchCalls, 1);
+  assert.equal(sources[0]?.id, 'S1');
+  assert.equal(sources[0]?.title, 'Public guide');
+  assert.equal(sources[0]?.publisher, 'public.example.com');
+  assert.equal(sources[0]?.retrievedAt, '2026-10-28T12:00:00.000Z');
+  assert.match(sources[0]?.excerpt ?? '', /deterministic research source fixture/);
+});
+
+test('research import revalidates redirects and rejects a redirect to localhost before fetching it', async () => {
+  let fetchCalls = 0;
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/redirect'], {
+      resolveHost: async (hostname) => {
+        if (hostname === 'localhost') return [{ address: '127.0.0.1', family: 4 }];
+        return [{ address: '93.184.216.34', family: 4 }];
+      },
+      fetchImpl: async () => {
+        fetchCalls += 1;
+        return new Response(null, { status: 302, headers: { location: 'http://localhost/private' } });
+      },
+    }),
+    ResearchSourceError,
+  );
+  assert.equal(fetchCalls, 1);
+});
+
+test('research import rejects unsupported content types and oversized responses', async () => {
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/file'], {
+      resolveHost: publicDns,
+      fetchImpl: async () => new Response('binary', { status: 200, headers: { 'content-type': 'application/pdf' } }),
+    }),
+    (error) => error instanceof ResearchSourceError && error.status === 415,
+  );
+  await assert.rejects(
+    loadResearchSources(['https://public.example.com/large'], {
+      resolveHost: publicDns,
+      maxBytes: 10,
+      fetchImpl: async () => new Response('this response exceeds ten bytes', {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+      }),
+    }),
+    (error) => error instanceof ResearchSourceError && error.status === 413,
+  );
+});
+
+test('citation integrity accepts only source IDs returned by the research loader', () => {
+  const article = { ...validArticle(), introduction: 'Grounded claim [S1].' };
+  assert.deepEqual(assertCitationIntegrity(article, [sourceRecord()]), ['S1']);
+  assert.throws(
+    () => assertCitationIntegrity({ ...article, introduction: 'Claim [S2].' }, [sourceRecord()]),
+    /not supplied/i,
+  );
+  assert.throws(
+    () => assertCitationIntegrity(validArticle(), [sourceRecord()]),
+    /did not cite/i,
+  );
+  assert.deepEqual(assertCitationIntegrity(validArticle(), []), []);
+});
+
+test('Wix AI receives research excerpts and per-link focus notes when sources are supplied', async () => {
+  let callArgs = null;
+  const sources = [{ ...sourceRecord(), userNotes: 'Focus on the official recommendation rather than general background.' }];
+  const article = { ...validArticle(), introduction: 'Research-backed claim [S1].' };
+  const result = await generateBlogArticle(
+    { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Use evidence.', seoKeywords: [] },
+    {
+      model: 'gpt-5-mini',
+      researchSources: sources,
+      generateText: async (args) => {
+        callArgs = args;
+        return { text: JSON.stringify(article) };
+      },
+    },
+  );
+
+  assert.deepEqual(result, article);
+  assert.match(callArgs.system, /untrusted webpage content/);
+  assert.match(callArgs.system, /exact form \[S1\]/);
+  assert.deepEqual(JSON.parse(callArgs.prompt).researchSources, sources);
+  assert.match(JSON.parse(callArgs.prompt).researchSources[0].userNotes, /official recommendation/);
+});
+
+
+test('editor Markdown emphasis, lists, and quotes convert to Wix rich-content nodes', () => {
+  const document = bodyToRichContent(
+    '## Format test\n\n**Bold words** and *italic words*.\n\n- First item\n- Second item\n\n> A quoted sentence.',
+  );
+  const allNodes = [];
+  const visit = (node) => {
+    allNodes.push(node);
+    for (const child of node.nodes ?? []) visit(child);
+  };
+  document.nodes.forEach(visit);
+
+  const heading = allNodes.find((node) => node.type === 'HEADING');
+  const bold = allNodes.find((node) => node.textData?.text === 'Bold words');
+  const italic = allNodes.find((node) => node.textData?.text === 'italic words');
+  const list = allNodes.find((node) => node.type === 'BULLETED_LIST');
+  const quote = allNodes.find((node) => node.type === 'BLOCKQUOTE');
+
+  assert.equal(heading?.type, 'HEADING');
+  assert.equal(bold?.textData?.decorations.some((decoration) => decoration.type === 'BOLD'), true);
+  assert.equal(italic?.textData?.decorations.some((decoration) => decoration.type === 'ITALIC'), true);
+  assert.equal(list?.nodes?.filter((node) => node.type === 'LIST_ITEM').length, 2);
+  assert.equal(quote?.nodes?.[0]?.type, 'PARAGRAPH');
+});
+
+test('draft rich content turns verified citation markers and source URLs into real Ricos links', () => {
+  const source = {
+    id: 'S1',
+    title: 'Public research article',
+    url: 'https://public.example.com/article',
+  };
+  const sources = parseResearchCitationSources([source]);
+  const document = bodyToRichContent(
+    '## Research\n\nA grounded claim [S1].\n\n## Sources\n\n- [S1] Public research article — https://public.example.com/article',
+    sources,
+  );
+  const allNodes = [];
+  const visit = (node) => {
+    allNodes.push(node);
+    for (const child of node.nodes ?? []) visit(child);
+  };
+  document.nodes.forEach(visit);
+  const textNodes = allNodes.filter((node) => node.type === 'TEXT');
+  const linkedCitation = textNodes.find((node) => node.textData?.text === '[S1]');
+  assert.equal(linkedCitation?.textData?.decorations[0]?.type, 'LINK');
+  assert.equal(linkedCitation?.textData?.decorations[0]?.linkData?.link?.url, source.url);
+  const linkedUrl = textNodes.find((node) => node.textData?.text === source.url);
+  assert.equal(linkedUrl?.textData?.decorations[0]?.type, 'LINK');
+  assert.equal(linkedUrl?.textData?.decorations[0]?.linkData?.link?.url, source.url);
+});
+
+test('draft citation-source parsing rejects forged IDs, invalid schemes, and duplicate IDs', () => {
+  assert.deepEqual(parseResearchCitationSources(undefined), []);
+  assert.throws(
+    () => parseResearchCitationSources([{ id: 'S7', title: 'Source', url: 'https://public.example.com/a' }]),
+    /IDs must be unique IDs from S1 through S5/i,
+  );
+  assert.throws(
+    () => parseResearchCitationSources([{ id: 'S1', title: 'Source', url: 'javascript:alert(1)' }]),
+    ResearchSourceError,
+  );
+  assert.throws(
+    () => parseResearchCitationSources([
+      { id: 'S1', title: 'One', url: 'https://public.example.com/a' },
+      { id: 'S1', title: 'Two', url: 'https://public.example.com/b' },
+    ]),
+    /unique IDs/i,
+  );
+});
+
+
+
+test('research-link rows preserve optional source focus notes and reject invalid rows', () => {
+  const entries = parseResearchLinkEntries([
+    { url: 'https://public.example.com/article#section', notes: 'Focus on the main recommendation.' },
+    { url: 'https://public.example.org/guide', notes: '' },
+    { url: '', notes: '' },
+  ]);
+  assert.deepEqual(entries, [
+    { url: 'https://public.example.com/article', notes: 'Focus on the main recommendation.' },
+    { url: 'https://public.example.org/guide', notes: '' },
+  ]);
+  assert.throws(
+    () => parseResearchLinkEntries([{ url: 'https://public.example.com/a', notes: 'x'.repeat(501) }]),
+    /500 characters or fewer/i,
+  );
+  assert.throws(
+    () => parseResearchLinkEntries([
+      { url: 'https://public.example.com/article', notes: '' },
+      { url: 'https://public.example.com/article#duplicate', notes: '' },
+    ]),
+    /duplicate/i,
+  );
+  assert.throws(
+    () => parseResearchLinkEntries([{ url: '', notes: 'Please focus on the main heading.' }]),
+    /add a URL or clear the notes/i,
+  );
+});
+
+test('visual-reference parser accepts normalized JPEG image and video frames only', () => {
+  const jpeg = 'data:image/jpeg;base64,AAAA';
+  const imageReference = {
+    name: 'cover.png',
+    kind: 'image',
+    notes: 'Use the colors and subject as inspiration.',
+    frames: [{ label: 'Image', dataUrl: jpeg }],
+  };
+  const videoReference = {
+    name: 'demo.mp4',
+    kind: 'video',
+    notes: 'Focus on the visible steps, not audio.',
+    frames: [
+      { label: 'Frame at 18%', dataUrl: jpeg },
+      { label: 'Frame at 50%', dataUrl: jpeg },
+      { label: 'Frame at 82%', dataUrl: jpeg },
+    ],
+  };
+  assert.deepEqual(parseMediaReferences([imageReference, videoReference]), [imageReference, videoReference]);
+  assert.throws(
+    () => parseMediaReferences([{ ...imageReference, frames: [{ label: 'Image', dataUrl: 'data:image/png;base64,AAAA' }] }]),
+    /valid JPEG data URL/i,
+  );
+  assert.throws(
+    () => parseMediaReferences([{ ...imageReference, kind: 'video', frames: [] }]),
+    /between one and three/i,
+  );
+  assert.throws(
+    () => parseMediaReferences(Array.from({ length: 5 }, (_, index) => ({ ...imageReference, name: 'image-' + index + '.jpg' }))),
+    /no more than 4/i,
+  );
+  assert.equal(MAX_MEDIA_FRAMES, 8);
+});
+
+test('Wix AI generation forwards visual references to the generator adapter', async () => {
+  let callArgs = null;
+  const mediaReferences = [{
+    name: 'storefront.jpg',
+    kind: 'image',
+    notes: 'Use this as visual context.',
+    frames: [{ label: 'Image', dataUrl: 'data:image/jpeg;base64,AAAA' }],
+  }];
+  const result = await generateBlogArticle(
+    { topic: 'A store profile', audience: 'local shoppers', tone: 'warm', instructions: 'Describe the experience.', seoKeywords: [] },
+    {
+      model: 'gpt-5-mini',
+      mediaReferences,
+      generateText: async (args) => {
+        callArgs = args;
+        return { text: JSON.stringify(validArticle()) };
+      },
+    },
+  );
+  assert.deepEqual(result, validArticle());
+  assert.deepEqual(callArgs.mediaReferences, mediaReferences);
+  assert.match(callArgs.system, /Visual reference frames are supplied as image inputs/);
+  assert.match(callArgs.system, /audio and unsampled moments are not available/);
+});
+
+test('local Wix development CORS permits localhost and known Wix-managed origins only', () => {
+  assert.equal(isAllowedDevCorsOrigin('http://localhost:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('http://127.0.0.1:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('http://[::1]:4321'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://mysite.editor.wix.com'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://username.wixsite.com'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://mysite.wixstudio.io'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://012509d2-64ed-4670-bc27-8299e942673f.wix.run'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org'), true);
+  assert.equal(isAllowedDevCorsOrigin('https://attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://wix.com.attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://unrelated.wix.com'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://nested.username.wixsite.com'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://nested.dev-sitex1487338744.wixdev-sites.org'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org.attacker.example'), false);
+  assert.equal(isAllowedDevCorsOrigin('https://customer.wixdev-sites.org'), false);
+  assert.equal(isAllowedDevCorsOrigin('http://malicious.wix.com'), false);
+});
+
+test('custom development origins must be explicitly configured as exact HTTPS origins', () => {
+  const customOrigin = 'https://my-custom-development-domain.example';
+  assert.equal(isAllowedDevCorsOrigin(customOrigin), false);
+  assert.equal(isAllowedDevCorsOrigin(customOrigin, customOrigin), true);
+  assert.equal(isAllowedDevCorsOrigin('https://another-domain.example', customOrigin), false);
+  assert.throws(() => getAllowedDevCorsOrigins('https://my-domain.example/path'), /exact HTTPS origins/);
+  assert.throws(() => getAllowedDevCorsOrigins('http://my-domain.example'), /exact HTTPS origins/);
 });

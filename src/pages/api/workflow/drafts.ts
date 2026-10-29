@@ -7,6 +7,7 @@ import { ApiError } from '../../../lib/server/authorization-core';
 import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/server/blog-content';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
+import { parseResearchCitationSources, ResearchSourceError } from '../../../lib/server/research-sources';
 
 async function verifyWixBlogInstalled(): Promise<void> {
   let appInstance;
@@ -35,16 +36,7 @@ async function verifyWixBlogInstalled(): Promise<void> {
     );
   }
 
-  console.info(
-    '[blog-install-check] App Instance:',
-    appInstance,
-  );
-
   const installedApps = appInstance.site?.installedWixApps;
-  console.info(
-    '[blog-install-check] installedWixApps:',
-    installedApps,
-  );
   if (!Array.isArray(installedApps)) {
     throw new ApiError(
       503,
@@ -76,7 +68,15 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const submission = parseDraftSubmission(body);
-    const richContent = bodyToRichContent(submission.body);
+    const input = body as Record<string, unknown>;
+    if (typeof input.generatedByMemberId !== 'string' || input.generatedByMemberId !== member.memberId) {
+      throw new ApiError(
+        403,
+        'Only the Wix member who generated this article can save it as a draft. Sign in with the original account and generate the article again if needed.',
+      );
+    }
+    const citationSources = parseResearchCitationSources(input.researchSources);
+    const richContent = bodyToRichContent(submission.body, citationSources);
 
     await verifyWixBlogInstalled();
 
@@ -169,6 +169,9 @@ export const POST: APIRoute = async ({ request }) => {
 
     return jsonResponse({ draft: result });
   } catch (error) {
+    if (error instanceof ResearchSourceError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     if (error instanceof InputValidationError) {
       return jsonResponse({ error: error.message }, 400);
     }

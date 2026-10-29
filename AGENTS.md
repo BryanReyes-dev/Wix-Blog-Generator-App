@@ -14,7 +14,7 @@ you can try updating the skills by running the following command:
 This will update the skills to the latest version.
 ## AI-assisted development workflow
 
-Before changing code, read [`agent-files/AI-WORKFLOW.md`](agent-files/AI-WORKFLOW.md) and follow its inspect → plan → scaffold → refine → validate workflow.
+Before substantial work, read [`agent-files/AGENTS.md`](agent-files/AGENTS.md), [`agent-files/Agents_Context.md`](agent-files/Agents_Context.md), [`agent-files/ARCHITECTURE.md`](agent-files/ARCHITECTURE.md), and [`agent-files/AI-WORKFLOW.md`](agent-files/AI-WORKFLOW.md). Use the first three to understand the repository's agent rules, current context, and architecture; use AI-WORKFLOW.md for the implementation procedure.
 
 - Inspect the current branch, working tree, relevant implementation, and project instructions before proposing edits. Preserve unrelated local changes.
 - Work in small, testable slices with explicit acceptance criteria. Prefer extending existing code over replacing it wholesale.

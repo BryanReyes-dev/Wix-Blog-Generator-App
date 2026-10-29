@@ -1,8 +1,10 @@
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { httpClient } from "@wix/essentials";
 import { location } from "@wix/site-location";
 import { authentication, currentMember } from "@wix/site-members";
-import styles from "./member-login-test.module.css";
-import { mountBlogWorkflow } from './blog-workflow';
+import "./../../../../styles/tailwind.css";
+import BlogWorkflow from "./blog-workflow";
 
 const ROUTES = {
   login: "/admin",
@@ -12,198 +14,215 @@ const ROUTES = {
 
 type AccessCheck =
   | { state: "signed-out"; memberExists: false }
-  | { state: "approved" | "denied"; memberExists: true }
-  | { state: "unavailable"; memberExists: boolean };
+  | { state: "approved" | "denied"; memberExists: true; memberId: string }
+  | { state: "unavailable"; memberExists: boolean; reason?: string };
 
-class MemberLoginTest extends HTMLElement {
-  connectedCallback() {
-    void this.initialize();
+type MemberIdentity = { memberId: string; displayName: string };
+type Screen =
+  | { kind: "loading"; title: string; message: string }
+  | { kind: "login"; status: string; action: "sign-in" | "sign-out"; retryVisible: boolean; statusKind?: "info" | "error" }
+  | { kind: "workflow"; identity: MemberIdentity }
+  | { kind: "message"; title: string; message: string; showRetry: boolean; showSignOut: boolean };
+
+const PANEL_CLASS =
+  "mx-auto flex min-h-[280px] w-full min-w-0 max-w-3xl flex-col items-start justify-center gap-4 rounded-2xl border border-[#2e394b] bg-[#0a0d13] p-4 text-[#f1f5fb] sm:p-8";
+const BUTTON_CLASS =
+  "inline-flex min-h-11 max-w-full items-center justify-center rounded-xl border border-transparent bg-[#4a8dff] px-4 py-3 text-sm font-semibold leading-5 text-white transition-colors hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8db7ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] disabled:cursor-not-allowed disabled:opacity-50";
+const SECONDARY_BUTTON_CLASS =
+  "inline-flex min-h-11 max-w-full items-center justify-center rounded-xl border border-[#44536a] bg-[#1a2230] px-4 py-3 text-sm font-semibold leading-5 text-[#f1f5fb] transition-colors hover:bg-[#202a3a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8db7ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] disabled:cursor-not-allowed disabled:opacity-50";
+
+async function checkAccess(): Promise<AccessCheck> {
+  let member: Awaited<ReturnType<typeof currentMember.getMember>>;
+
+  try {
+    member = await currentMember.getMember();
+  } catch {
+    return { state: "unavailable", memberExists: false };
   }
 
-  private async initialize() {
+  if (!member) return { state: "signed-out", memberExists: false };
+
+  try {
+    const apiUrl = new URL(import.meta.url).origin + "/api/workflow-access";
+    const response = await httpClient.fetchWithAuth(apiUrl);
+    if (!response.ok) {
+      let reason = "Approval API returned HTTP " + response.status + ".";
+      try {
+        const payload = await response.json() as { error?: unknown };
+        if (typeof payload.error === "string" && payload.error.trim()) {
+          reason = payload.error.trim().slice(0, 220);
+        }
+      } catch {
+        // Use the HTTP status when the response is not JSON.
+      }
+      return { state: "unavailable", memberExists: true, reason };
+    }
+
+    const result = await response.json() as { authorized?: unknown; memberId?: unknown };
+    if (typeof result.authorized !== "boolean" || typeof result.memberId !== "string" || !result.memberId) {
+      return {
+        state: "unavailable",
+        memberExists: true,
+        reason: "The approval API returned an unexpected response. Check the server logs.",
+      };
+    }
+
+    return result.authorized
+      ? { state: "approved", memberExists: true, memberId: result.memberId }
+      : { state: "denied", memberExists: true, memberId: result.memberId };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.slice(0, 120) : "network error";
+    return {
+      state: "unavailable",
+      memberExists: true,
+      reason: "Could not reach the approval API (" + detail + "). Check the browser Console for network or CORS errors; during local development, also check the wix dev terminal.",
+    };
+  }
+}
+
+async function getMemberDisplayName(): Promise<string> {
+  try {
+    const member = await currentMember.getMember();
+    const details = member as unknown as {
+      profile?: { nickname?: string | null; firstName?: string | null; lastName?: string | null };
+      contactDetails?: { firstName?: string | null; lastName?: string | null };
+    };
+    const profileName = details.profile?.nickname?.trim();
+    const fullName = [
+      details.contactDetails?.firstName ?? details.profile?.firstName,
+      details.contactDetails?.lastName ?? details.profile?.lastName,
+    ]
+      .filter((part): part is string => typeof part === "string" && Boolean(part.trim()))
+      .join(" ")
+      .trim();
+    return profileName || fullName || "Wix member";
+  } catch {
+    // The verified member ID still identifies the session.
+    return "Wix member";
+  }
+}
+
+function AccessPanel({
+  title,
+  message,
+  children,
+}: {
+  title: string;
+  message: string;
+  children?: ReactNode;
+}) {
+  return (
+    <section className={PANEL_CLASS}>
+      <h2 className="m-0 break-words text-2xl font-bold leading-tight tracking-tight text-[#f1f5fb] sm:text-3xl">{title}</h2>
+      <p role="status" aria-live="polite" className="m-0 break-words text-sm leading-6 text-[#a5b1c2]">{message}</p>
+      {children ? <div className="flex w-full flex-wrap gap-3">{children}</div> : null}
+    </section>
+  );
+}
+
+function MemberLoginApp() {
+  const [screen, setScreen] = useState<Screen>({
+    kind: "loading",
+    title: "Checking workflow access…",
+    message: "Verifying your signed-in member and approval status.",
+  });
+  const [authBusy, setAuthBusy] = useState(false);
+
+  const refreshLoginPage = useCallback(async () => {
+    setScreen({
+      kind: "login",
+      status: "Checking your Wix member session and workflow approval…",
+      action: "sign-in",
+      retryVisible: false,
+    });
+
+    const check = await checkAccess();
+    switch (check.state) {
+      case "signed-out":
+        setScreen({ kind: "login", status: "You are not signed in.", action: "sign-in", retryVisible: false });
+        return;
+      case "approved":
+        setScreen({
+          kind: "loading",
+          title: "Access approved",
+          message: "Opening the workflow…",
+        });
+        location.to(ROUTES.workflow);
+        return;
+      case "denied":
+        setScreen({
+          kind: "loading",
+          title: "Access not approved",
+          message: "Redirecting to the permission page…",
+        });
+        location.to(ROUTES.permissionDenied);
+        return;
+      case "unavailable":
+        setScreen({
+          kind: "login",
+          status: check.memberExists
+            ? "You are signed in, but approval could not be verified." +
+              (check.reason ? " Details: " + check.reason : "") +
+              " Access remains blocked; retry or sign out."
+            : "Your member session or approval could not be verified." +
+              (check.reason ? " Details: " + check.reason : "") +
+              " Retry the check or sign in again.",
+          action: check.memberExists ? "sign-out" : "sign-in",
+          retryVisible: true,
+          statusKind: "error",
+        });
+        return;
+    }
+  }, []);
+
+  const initialize = useCallback(async () => {
     let route: string;
 
     try {
-      // Wix returns the current site's path as segments, excluding the domain.
       const segments = await location.path();
-      route = `/${segments.map((segment) => segment.trim()).filter(Boolean).join("/")}`;
+      route = "/" + segments.map((segment) => segment.trim()).filter(Boolean).join("/");
     } catch {
-      this.renderMessage(
-        "Authentication routing unavailable",
-        "Open the published development site to check member authentication and page navigation.",
-        true,
-      );
+      setScreen({
+        kind: "message",
+        title: "Authentication routing unavailable",
+        message: "Open the published development site to check member authentication and page navigation.",
+        showRetry: true,
+        showSignOut: false,
+      });
       return;
     }
 
     if (route === ROUTES.login) {
-      this.renderLoginPage();
-      await this.refreshLoginPage();
+      await refreshLoginPage();
       return;
     }
 
-    if (route === ROUTES.workflow || route === ROUTES.permissionDenied) {
-      await this.guardRoute(route);
+    if (route !== ROUTES.workflow && route !== ROUTES.permissionDenied) {
+      setScreen({
+        kind: "message",
+        title: "Widget placed on the wrong page",
+        message: "Place this widget on /admin, /admin/workflow, or /admin/permission-denied.",
+        showRetry: false,
+        showSignOut: false,
+      });
       return;
     }
 
-    this.renderMessage(
-      "Widget placed on the wrong page",
-      "Place this widget on /admin, /admin/workflow, or /admin/permission-denied.",
-    );
-  }
-
-  private createPanel(titleText: string, messageText: string) {
-    this.innerHTML = "";
-
-    const root = document.createElement("div");
-    root.className = styles.root;
-
-    const title = document.createElement("h2");
-    title.className = styles.title;
-    title.textContent = titleText;
-
-    const status = document.createElement("p");
-    status.className = styles.status;
-    status.dataset.status = "true";
-    status.textContent = messageText;
-
-    root.append(title, status);
-    this.appendChild(root);
-    return { root, status };
-  }
-
-  private renderLoginPage() {
-    const { root } = this.createPanel(
-      "Intern sign-in",
-      "Checking your Wix member session and workflow approval…",
-    );
-
-    const authButton = document.createElement("button");
-    authButton.className = styles.button;
-    authButton.type = "button";
-    authButton.dataset.authButton = "true";
-    authButton.dataset.authAction = "sign-in";
-    authButton.textContent = "Sign in with Wix";
-    authButton.addEventListener("click", () => {
-      const status = this.querySelector<HTMLParagraphElement>("[data-status]");
-      if (status) void this.handleAuth(authButton, status);
+    setScreen({
+      kind: "loading",
+      title: "Checking workflow access…",
+      message: "Verifying your signed-in member and approval status.",
     });
-
-    const retryButton = document.createElement("button");
-    retryButton.className = styles.button;
-    retryButton.type = "button";
-    retryButton.dataset.retryButton = "true";
-    retryButton.textContent = "Retry access check";
-    retryButton.hidden = true;
-    retryButton.addEventListener("click", () => {
-      void this.refreshLoginPage();
-    });
-
-    root.append(authButton, retryButton);
-  }
-
-  private async refreshLoginPage() {
-    const status = this.querySelector<HTMLParagraphElement>("[data-status]");
-    const authButton = this.querySelector<HTMLButtonElement>("[data-auth-button]");
-    const retryButton = this.querySelector<HTMLButtonElement>("[data-retry-button]");
-
-    if (!status || !authButton || !retryButton) return;
-
-    status.textContent = "Checking your Wix member session and workflow approval…";
-    retryButton.hidden = true;
-
-    const check = await this.checkAccess();
-
-    switch (check.state) {
-      case "signed-out":
-        status.textContent = "You are not signed in.";
-        authButton.textContent = "Sign in with Wix";
-        authButton.dataset.authAction = "sign-in";
-        return;
-
-      case "approved":
-        status.textContent = "Access approved. Opening the workflow…";
-        location.to(ROUTES.workflow);
-        return;
-
-      case "denied":
-        status.textContent = "Your account is signed in but is not approved. Redirecting…";
-        location.to(ROUTES.permissionDenied);
-        return;
-
-      case "unavailable":
-        status.textContent = check.memberExists
-          ? "You are signed in, but approval could not be verified. Access remains blocked; retry or sign out."
-          : "Your member session or approval could not be verified. Retry the check or sign in again.";
-        authButton.textContent = check.memberExists ? "Sign out" : "Sign in with Wix";
-        authButton.dataset.authAction = check.memberExists ? "sign-out" : "sign-in";
-        retryButton.hidden = false;
-        return;
-    }
-  }
-
-  private async checkAccess(): Promise<AccessCheck> {
-    let member: Awaited<ReturnType<typeof currentMember.getMember>>;
-
-    try {
-      member = await currentMember.getMember();
-    } catch {
-      return { state: "unavailable", memberExists: false };
-    }
-
-    if (!member) return { state: "signed-out", memberExists: false };
-
-    try {
-      const apiUrl = new URL(import.meta.url).origin + "/api/workflow-access";
-      const response = await httpClient.fetchWithAuth(apiUrl);
-      if (!response.ok) return { state: "unavailable", memberExists: true };
-
-      const result = (await response.json()) as { authorized?: unknown };
-      if (typeof result.authorized !== "boolean") {
-        return { state: "unavailable", memberExists: true };
-      }
-
-      return result.authorized
-        ? { state: "approved", memberExists: true }
-        : { state: "denied", memberExists: true };
-    } catch {
-      return { state: "unavailable", memberExists: true };
-    }
-  }
-
-  private async handleAuth(button: HTMLButtonElement, status: HTMLParagraphElement) {
-    const action = button.dataset.authAction ?? "sign-in";
-    button.disabled = true;
-    status.textContent = action === "sign-out" ? "Signing out…" : "Opening Wix member login…";
-
-    try {
-      if (action === "sign-out") {
-        await authentication.logout();
-      } else {
-        await authentication.promptLogin({ mode: "login", modal: true });
-      }
-
-      await this.refreshLoginPage();
-    } catch {
-      status.textContent = action === "sign-out"
-        ? "Sign-out could not be completed. Please try again."
-        : "Sign-in was canceled or could not be completed.";
-    } finally {
-      button.disabled = false;
-    }
-  }
-
-  private async guardRoute(route: string) {
-    this.renderMessage("Checking workflow access…", "Verifying your signed-in member and approval status.");
-    const check = await this.checkAccess();
+    const check = await checkAccess();
 
     if (check.state === "unavailable") {
-      this.renderMessage(
-        "Unable to verify access",
-        "This page stays unavailable until Wix member status and workflow approval can be verified.",
-        true,
-      );
+      setScreen({
+        kind: "message",
+        title: "Unable to verify access",
+        message: "This page stays unavailable until Wix member status and workflow approval can be verified.",
+        showRetry: true,
+        showSignOut: false,
+      });
       return;
     }
 
@@ -218,7 +237,11 @@ class MemberLoginTest extends HTMLElement {
         return;
       }
 
-      this.renderWorkflowPage();
+      const displayName = await getMemberDisplayName();
+      setScreen({
+        kind: "workflow",
+        identity: { memberId: check.memberId, displayName },
+      });
       return;
     }
 
@@ -227,55 +250,122 @@ class MemberLoginTest extends HTMLElement {
       return;
     }
 
-    this.renderMessage(
-      "Permission denied",
-      "You are signed in, but the site team has not approved your account for the blog-generation workflow. Contact the site administrator if you believe this is a mistake.",
-      false,
-      true,
-    );
-  }
+    setScreen({
+      kind: "message",
+      title: "Permission denied",
+      message: "You are signed in, but the site team has not approved your account for the blog-generation workflow. Contact the site administrator if you believe this is a mistake.",
+      showRetry: false,
+      showSignOut: true,
+    });
+  }, [refreshLoginPage]);
 
-  private renderWorkflowPage() {
-    mountBlogWorkflow(this, async () => {
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
+
+  const handleAuth = async () => {
+    if (screen.kind !== "login" || authBusy) return;
+    const action = screen.action;
+    setAuthBusy(true);
+    setScreen((current) => current.kind === "login"
+      ? { ...current, status: action === "sign-out" ? "Signing out…" : "Opening Wix member login…" }
+      : current);
+
+    try {
+      if (action === "sign-out") {
+        await authentication.logout();
+      } else {
+        await authentication.promptLogin({ mode: "login", modal: true });
+      }
+      await refreshLoginPage();
+    } catch {
+      setScreen({
+        kind: "login",
+        status: action === "sign-out"
+          ? "Sign-out could not be completed. Please try again."
+          : "Sign-in was canceled or could not be completed.",
+        action,
+        retryVisible: true,
+        statusKind: "error",
+      });
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleMessageSignOut = async () => {
+    if (screen.kind !== "message") return;
+    setScreen({ ...screen, message: "Signing out…" });
+    try {
       await authentication.logout();
       location.to(ROUTES.login);
-    });
+    } catch {
+      setScreen((current) => current.kind === "message"
+        ? { ...current, message: "Sign-out could not be completed. Please try again." }
+        : current);
+    }
+  };
+
+  return (
+    <div className="tw-widget box-border w-full min-w-0 bg-[#0a0d13] p-3 font-sans text-[#f1f5fb] sm:p-4">
+      {screen.kind === "loading" ? (
+        <AccessPanel title={screen.title} message={screen.message} />
+      ) : null}
+
+      {screen.kind === "login" ? (
+        <AccessPanel title="Intern sign-in" message={screen.status}>
+          <button type="button" onClick={() => void handleAuth()} disabled={authBusy} className={BUTTON_CLASS}>
+            {authBusy ? (screen.action === "sign-out" ? "Signing out…" : "Opening Wix login…") :
+              screen.action === "sign-out" ? "Sign out" : "Sign in with Wix"}
+          </button>
+          {screen.retryVisible ? (
+            <button type="button" onClick={() => void refreshLoginPage()} disabled={authBusy} className={SECONDARY_BUTTON_CLASS}>
+              Retry access check
+            </button>
+          ) : null}
+        </AccessPanel>
+      ) : null}
+
+      {screen.kind === "message" ? (
+        <AccessPanel title={screen.title} message={screen.message}>
+          {screen.showRetry ? (
+            <button type="button" onClick={() => void initialize()} className={BUTTON_CLASS}>Retry access check</button>
+          ) : null}
+          {screen.showSignOut ? (
+            <button type="button" onClick={() => void handleMessageSignOut()} className={BUTTON_CLASS}>Sign out</button>
+          ) : null}
+        </AccessPanel>
+      ) : null}
+
+      {screen.kind === "workflow" ? (
+        <BlogWorkflow
+          identity={screen.identity}
+          signOut={async () => {
+            await authentication.logout();
+            location.to(ROUTES.login);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+class MemberLoginTest extends HTMLElement {
+  private reactRoot: Root | null = null;
+
+  connectedCallback() {
+    if (this.reactRoot) return;
+    // The Wix widget host must behave like a block so its React layout can use the full width.
+    this.style.display = "block";
+    this.style.width = "100%";
+    this.style.minWidth = "0";
+    this.reactRoot = createRoot(this);
+    this.reactRoot.render(<MemberLoginApp />);
   }
 
-  private renderMessage(title: string, message: string, showRetry = false, showSignOut = false) {
-    const { root } = this.createPanel(title, message);
-
-    if (showRetry) {
-      const retryButton = document.createElement("button");
-      retryButton.className = styles.button;
-      retryButton.type = "button";
-      retryButton.textContent = "Retry access check";
-      retryButton.addEventListener("click", () => {
-        void this.initialize();
-      });
-      root.appendChild(retryButton);
-    }
-
-    if (showSignOut) {
-      const signOutButton = document.createElement("button");
-      signOutButton.className = styles.button;
-      signOutButton.type = "button";
-      signOutButton.textContent = "Sign out";
-      signOutButton.addEventListener("click", async () => {
-        signOutButton.disabled = true;
-        const status = root.querySelector<HTMLParagraphElement>("[data-status]");
-        if (status) status.textContent = "Signing out…";
-
-        try {
-          await authentication.logout();
-          location.to(ROUTES.login);
-        } catch {
-          if (status) status.textContent = "Sign-out could not be completed. Please try again.";
-          signOutButton.disabled = false;
-        }
-      });
-      root.appendChild(signOutButton);
-    }
+  disconnectedCallback() {
+    this.reactRoot?.unmount();
+    this.reactRoot = null;
   }
 }
 

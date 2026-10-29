@@ -3,12 +3,40 @@ import { defineConfig } from 'astro/config';
 import wix from '@wix/astro';
 import react from "@astrojs/react";
 import wixHostingAdapter from "@wix/astro-wix-hosting-adapter";
+import { isAllowedDevCorsOrigin } from './src/lib/dev-cors.mjs';
+
+// The Wix site/editor and the local app server have different origins while
+// running `wix dev`. Allow known Wix-managed HTTPS origins, localhost, and
+// any explicitly configured custom development origin. This is Vite dev-server
+// CORS only; it does not configure the production hosting adapter.
+const runtimeEnvironment = /** @type {typeof globalThis & { process?: { env?: Record<string, string | undefined> } }} */ (globalThis);
+const explicitDevCorsOrigins = runtimeEnvironment.process?.env?.WIX_DEV_CORS_ORIGINS ?? '';
 
 export default defineConfig({
   output: "server",
   adapter: wixHostingAdapter(),
   integrations: [wix(), react()],
   image: { domains: ["static.wixstatic.com"] },
-  security: { checkOrigin: false },
-  devToolbar: { enabled: false }
+  devToolbar: { enabled: false },
+  vite: {
+    server: {
+      cors: {
+        origin(origin, callback) {
+          const allowed = typeof origin === 'string'
+            && isAllowedDevCorsOrigin(origin, explicitDevCorsOrigins);
+          if (!allowed && origin) {
+            console.warn('[dev-cors] Rejected browser Origin:', origin);
+          }
+
+          // Vite's CORS middleware accepts null for the no-error callback.
+          // Its exposed type currently requires Error, so narrow the callback
+          // through unknown to express the runtime contract without changing it.
+          const corsCallback = /** @type {(error: Error | null, origin: string | boolean) => void} */ (
+            /** @type {unknown} */ (callback)
+          );
+          corsCallback(null, allowed);
+        },
+      },
+    },
+  },
 });

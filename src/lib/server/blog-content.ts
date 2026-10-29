@@ -41,10 +41,23 @@ export type DraftSubmission = {
   seoKeywords: string[];
 };
 
+type RichTextDecoration =
+  | {
+      type: 'LINK';
+      linkData: {
+        link: {
+          url: string;
+          target: 'BLANK';
+          rel: { noreferrer: true };
+        };
+      };
+    }
+  | { type: 'BOLD' | 'ITALIC' };
+
 type RichTextNode = {
-  type: 'TEXT' | 'PARAGRAPH' | 'HEADING';
+  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'BULLETED_LIST' | 'LIST_ITEM' | 'BLOCKQUOTE';
   nodes?: RichTextNode[];
-  textData?: { text: string; decorations: [] };
+  textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
   headingData?: { level: number; textStyle: { textAlignment: 'AUTO' } };
 };
@@ -166,62 +179,173 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
   };
 }
 
-function textNode(text: string): RichTextNode {
+type CitationLink = { id: string; url: string };
+
+function textNode(text: string, decorations: RichTextDecoration[] = []): RichTextNode {
   return {
     type: 'TEXT',
     nodes: [],
-    textData: { text, decorations: [] },
+    textData: { text, decorations },
   };
 }
 
-function paragraphNode(text: string): RichTextNode {
+function inlineTextNodes(text: string, citationSources: CitationLink[]): RichTextNode[] {
+  const sourceById = new Map<string, string>(citationSources.map((source) => [source.id, source.url] as const));
+  const pattern = /\[S\d+\]|https?:\/\/[^\s<>"']+|\*\*[^*\n]+\*\*|\*[^*\n]+\*/g;
+  const nodes: RichTextNode[] = [];
+  let cursor = 0;
+
+  const linkDecoration = (url: string): RichTextDecoration => ({
+    type: 'LINK',
+    linkData: { link: { url, target: 'BLANK', rel: { noreferrer: true } } },
+  });
+
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0];
+    const index = match.index;
+    if (index > cursor) nodes.push(textNode(text.slice(cursor, index)));
+
+    const citation = /^\[(S\d+)\]$/.exec(token);
+    if (citation) {
+      const sourceUrl = sourceById.get(citation[1] ?? '');
+      nodes.push(sourceUrl ? textNode(token, [linkDecoration(sourceUrl)]) : textNode(token));
+      cursor = index + token.length;
+      continue;
+    }
+
+    if (token.startsWith('**') && token.endsWith('**')) {
+      nodes.push(textNode(token.slice(2, -2), [{ type: 'BOLD' }]));
+      cursor = index + token.length;
+      continue;
+    }
+    if (token.startsWith('*') && token.endsWith('*')) {
+      nodes.push(textNode(token.slice(1, -1), [{ type: 'ITALIC' }]));
+      cursor = index + token.length;
+      continue;
+    }
+
+    const trailing = /[),.;!?]+$/.exec(token)?.[0] ?? '';
+    const candidate = trailing ? token.slice(0, -trailing.length) : token;
+    let safeUrl: string | null = null;
+    try {
+      const url = new URL(candidate);
+      if (url.protocol === 'http:' || url.protocol === 'https:') safeUrl = url.href;
+    } catch {
+      // Invalid URL-looking text remains a plain text node.
+    }
+
+    nodes.push(safeUrl ? textNode(candidate, [linkDecoration(safeUrl)]) : textNode(candidate));
+    if (trailing) nodes.push(textNode(trailing));
+    cursor = index + token.length;
+  }
+
+  if (cursor < text.length) nodes.push(textNode(text.slice(cursor)));
+  return nodes.length ? nodes : [textNode(text)];
+}
+
+function paragraphNode(text: string, citationSources: CitationLink[]): RichTextNode {
   return {
     type: 'PARAGRAPH',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, citationSources),
     paragraphData: { textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-function headingNode(text: string, level: number): RichTextNode {
+function headingNode(text: string, level: number, citationSources: CitationLink[]): RichTextNode {
   return {
     type: 'HEADING',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, citationSources),
     headingData: { level, textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-export function bodyToRichContent(body: string): WixRichContent {
+function bulletListNode(items: string[], citationSources: CitationLink[]): RichTextNode {
+  return {
+    type: 'BULLETED_LIST',
+    nodes: items.map((item) => ({
+      type: 'LIST_ITEM',
+      nodes: [paragraphNode(item, citationSources)],
+    })),
+  };
+}
+
+function blockquoteNode(text: string, citationSources: CitationLink[]): RichTextNode {
+  return {
+    type: 'BLOCKQUOTE',
+    nodes: [paragraphNode(text, citationSources)],
+  };
+}
+
+export function bodyToRichContent(
+  body: string,
+  citationSources: CitationLink[] = [],
+): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
   let paragraphLines: string[] = [];
+  let listItems: string[] = [];
+  let quoteLines: string[] = [];
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0) return;
-    contentBlocks.push(paragraphNode(paragraphLines.join(' ')));
+    contentBlocks.push(paragraphNode(paragraphLines.join(' '), citationSources));
     paragraphLines = [];
+  };
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    contentBlocks.push(bulletListNode(listItems, citationSources));
+    listItems = [];
+  };
+  const flushQuote = () => {
+    if (quoteLines.length === 0) return;
+    contentBlocks.push(blockquoteNode(quoteLines.join(' '), citationSources));
+    quoteLines = [];
+  };
+  const flushStructuredBlocks = () => {
+    flushParagraph();
+    flushList();
+    flushQuote();
   };
 
   for (const line of body.replace(/\r\n?/g, '\n').split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) {
-      flushParagraph();
+      flushStructuredBlocks();
       continue;
     }
 
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
     if (headingMatch) {
-      flushParagraph();
+      flushStructuredBlocks();
       const hashes = headingMatch[1] ?? '';
       const heading = headingMatch[2]?.trim();
       if (heading) {
-        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length)));
+        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length), citationSources));
       }
       continue;
     }
 
+    const listMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+    if (listMatch) {
+      flushParagraph();
+      flushQuote();
+      listItems.push(listMatch[1] ?? '');
+      continue;
+    }
+
+    const quoteMatch = /^>\s?(.+)$/.exec(trimmed);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(quoteMatch[1] ?? '');
+      continue;
+    }
+
+    flushList();
+    flushQuote();
     paragraphLines.push(trimmed);
   }
 
-  flushParagraph();
+  flushStructuredBlocks();
 
   const nodes: RichTextNode[] = [];
   contentBlocks.forEach((block, index) => {
