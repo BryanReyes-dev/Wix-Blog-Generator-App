@@ -175,7 +175,7 @@ class MemberLoginTest extends HTMLElement {
         return {
           state: "unavailable",
           memberExists: true,
-          reason: "The approval API returned an unexpected response. Check the local server log.",
+          reason: "The approval API returned an unexpected response. Check the server logs.",
         };
       }
 
@@ -187,7 +187,7 @@ class MemberLoginTest extends HTMLElement {
       return {
         state: "unavailable",
         memberExists: true,
-        reason: `Could not reach the local approval API (${detail}). Check the browser Console and the wix dev terminal for CORS errors.`,
+        reason: `Could not reach the approval API (${detail}). Check the browser Console for network or CORS errors; during local development, also check the wix dev terminal.`,
       };
     }
   }
