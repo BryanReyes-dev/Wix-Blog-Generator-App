@@ -13,7 +13,10 @@ export type ResearchSource = {
   publisher: string;
   retrievedAt: string;
   excerpt: string;
+  userNotes?: string;
 };
+
+export type ResearchLinkEntry = { url: string; notes: string };
 
 export type ResearchCitationSource = Pick<ResearchSource, 'id' | 'title' | 'url'>;
 
@@ -241,6 +244,44 @@ export function parseResearchUrls(value: unknown): string[] {
     throw new ResearchSourceError('Remove duplicate research links before generating the article.', 400);
   }
   return normalized;
+}
+
+export function parseResearchLinkEntries(value: unknown): ResearchLinkEntry[] {
+  if (value === undefined || value === null || value === '') return [];
+
+  const entries: unknown[] = typeof value === 'string'
+    ? value.split(/\\r?\\n/)
+    : Array.isArray(value)
+      ? value
+      : (() => { throw new ResearchSourceError('Research links must be a list of URLs.', 400); })();
+
+  const normalizedEntries = entries.map((entry, index): ResearchLinkEntry | null => {
+    if (typeof entry === 'string') {
+      const url = entry.trim();
+      return url ? { url, notes: '' } : null;
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new ResearchSourceError(`Research link ${index + 1} is invalid.`, 400);
+    }
+    const record = entry as Record<string, unknown>;
+    const url = typeof record.url === 'string' ? record.url.trim() : '';
+    const notes = record.notes === undefined ? '' : record.notes;
+    if (!url) {
+      if (typeof notes === 'string' && !notes.trim()) return null;
+      throw new ResearchSourceError(`Add a URL or clear the notes for research link ${index + 1}.`, 400);
+    }
+    if (typeof notes !== 'string' || notes.length > 500) {
+      throw new ResearchSourceError(`Notes for research link ${index + 1} must be 500 characters or fewer.`, 400);
+    }
+    return { url, notes: notes.trim() };
+  }).filter((entry): entry is ResearchLinkEntry => entry !== null);
+
+  if (normalizedEntries.length > MAX_RESEARCH_SOURCES) {
+    throw new ResearchSourceError('Use no more than five research links per article.', 400);
+  }
+
+  const urls = parseResearchUrls(normalizedEntries.map((entry) => entry.url));
+  return normalizedEntries.map((entry, index) => ({ ...entry, url: urls[index] ?? entry.url }));
 }
 
 function decodeHtmlEntities(value: string): string {
