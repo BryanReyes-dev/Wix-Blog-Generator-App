@@ -9,9 +9,10 @@ import { AiProviderError, generateBlogArticle } from '../../../lib/server/genera
 import {
   assertCitationIntegrity,
   loadResearchSources,
-  parseResearchUrls,
+  parseResearchLinkEntries,
   ResearchSourceError,
 } from '../../../lib/server/research-sources';
+import { parseMediaReferences } from '../../../lib/server/media-references';
 
 type ServerEnvironment = ImportMetaEnv & {
   WIX_AI_MODEL?: string;
@@ -19,13 +20,13 @@ type ServerEnvironment = ImportMetaEnv & {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    await requireApprovedSiteMember();
+    const member = await requireApprovedSiteMember();
 
     let body: unknown;
     try {
       const text = await request.text();
-      if (text.length > 24_576) {
-        return jsonResponse({ error: 'The brief and research links are too large. Shorten them and try again.' }, 413);
+      if (text.length > 5_200_000) {
+        return jsonResponse({ error: 'The brief, links, and visual references are too large. Remove a file or use smaller media.' }, 413);
       }
       body = JSON.parse(text) as unknown;
     } catch {
@@ -34,12 +35,18 @@ export const POST: APIRoute = async ({ request }) => {
 
     const brief = parseBlogBrief(body);
     const input = body as Record<string, unknown>;
-    const researchUrls = parseResearchUrls(input.researchUrls);
-    const researchSources = await loadResearchSources(researchUrls);
+    const researchLinks = parseResearchLinkEntries(input.researchLinks ?? input.researchUrls);
+    const loadedSources = await loadResearchSources(researchLinks.map((link) => link.url));
+    const researchSources = loadedSources.map((source, index) => ({
+      ...source,
+      userNotes: researchLinks[index]?.notes || undefined,
+    }));
+    const mediaReferences = parseMediaReferences(input.mediaReferences);
     const environment = import.meta.env as ServerEnvironment;
     const generated = await generateBlogArticle(brief, {
       model: environment.WIX_AI_MODEL?.trim() || 'gpt-5-mini',
       researchSources,
+      mediaReferences,
     });
 
     let article;
@@ -62,7 +69,7 @@ export const POST: APIRoute = async ({ request }) => {
       ...source,
       excerpt: excerpt.slice(0, 280),
     }));
-    return jsonResponse({ article, sources });
+    return jsonResponse({ article, sources, generatedBy: { memberId: member.memberId } });
   } catch (error) {
     if (error instanceof ResearchSourceError) {
       return jsonResponse({ error: error.message }, error.status);
