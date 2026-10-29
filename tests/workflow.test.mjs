@@ -19,11 +19,13 @@ import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
+import { MAX_MEDIA_FRAMES, parseMediaReferences } from '../src/lib/server/media-references.ts';
 import {
   assertCitationIntegrity,
   extractResearchPage,
   loadResearchSources,
   parseResearchCitationSources,
+  parseResearchLinkEntries,
   parseResearchUrls,
   ResearchSourceError,
   validateResearchUrl,
@@ -456,6 +458,93 @@ test('draft citation-source parsing rejects forged IDs, invalid schemes, and dup
   );
 });
 
+
+
+test('research-link rows preserve optional source focus notes and reject invalid rows', () => {
+  const entries = parseResearchLinkEntries([
+    { url: 'https://public.example.com/article#section', notes: 'Focus on the main recommendation.' },
+    { url: 'https://public.example.org/guide', notes: '' },
+    { url: '', notes: '' },
+  ]);
+  assert.deepEqual(entries, [
+    { url: 'https://public.example.com/article', notes: 'Focus on the main recommendation.' },
+    { url: 'https://public.example.org/guide', notes: '' },
+  ]);
+  assert.throws(
+    () => parseResearchLinkEntries([{ url: 'https://public.example.com/a', notes: 'x'.repeat(501) }]),
+    /500 characters or fewer/i,
+  );
+  assert.throws(
+    () => parseResearchLinkEntries([
+      { url: 'https://public.example.com/article', notes: '' },
+      { url: 'https://public.example.com/article#duplicate', notes: '' },
+    ]),
+    /duplicate/i,
+  );
+  assert.throws(
+    () => parseResearchLinkEntries([{ url: '', notes: 'Please focus on the main heading.' }]),
+    /add a URL or clear the notes/i,
+  );
+});
+
+test('visual-reference parser accepts normalized JPEG image and video frames only', () => {
+  const jpeg = 'data:image/jpeg;base64,AAAA';
+  const imageReference = {
+    name: 'cover.png',
+    kind: 'image',
+    notes: 'Use the colors and subject as inspiration.',
+    frames: [{ label: 'Image', dataUrl: jpeg }],
+  };
+  const videoReference = {
+    name: 'demo.mp4',
+    kind: 'video',
+    notes: 'Focus on the visible steps, not audio.',
+    frames: [
+      { label: 'Frame at 18%', dataUrl: jpeg },
+      { label: 'Frame at 50%', dataUrl: jpeg },
+      { label: 'Frame at 82%', dataUrl: jpeg },
+    ],
+  };
+  assert.deepEqual(parseMediaReferences([imageReference, videoReference]), [imageReference, videoReference]);
+  assert.throws(
+    () => parseMediaReferences([{ ...imageReference, frames: [{ label: 'Image', dataUrl: 'data:image/png;base64,AAAA' }] }]),
+    /valid JPEG data URL/i,
+  );
+  assert.throws(
+    () => parseMediaReferences([{ ...imageReference, kind: 'video', frames: [] }]),
+    /between one and three/i,
+  );
+  assert.throws(
+    () => parseMediaReferences(Array.from({ length: 5 }, (_, index) => ({ ...imageReference, name: 'image-' + index + '.jpg' }))),
+    /no more than 4/i,
+  );
+  assert.equal(MAX_MEDIA_FRAMES, 8);
+});
+
+test('Wix AI generation forwards visual references to the generator adapter', async () => {
+  let callArgs = null;
+  const mediaReferences = [{
+    name: 'storefront.jpg',
+    kind: 'image',
+    notes: 'Use this as visual context.',
+    frames: [{ label: 'Image', dataUrl: 'data:image/jpeg;base64,AAAA' }],
+  }];
+  const result = await generateBlogArticle(
+    { topic: 'A store profile', audience: 'local shoppers', tone: 'warm', instructions: 'Describe the experience.', seoKeywords: [] },
+    {
+      model: 'gpt-5-mini',
+      mediaReferences,
+      generateText: async (args) => {
+        callArgs = args;
+        return { text: JSON.stringify(validArticle()) };
+      },
+    },
+  );
+  assert.deepEqual(result, validArticle());
+  assert.deepEqual(callArgs.mediaReferences, mediaReferences);
+  assert.match(callArgs.system, /Visual reference frames are supplied as image inputs/);
+  assert.match(callArgs.system, /audio and unsampled moments are not available/);
+});
 
 test('local Wix development CORS permits localhost and known Wix-managed origins only', () => {
   assert.equal(isAllowedDevCorsOrigin('http://localhost:4321'), true);
