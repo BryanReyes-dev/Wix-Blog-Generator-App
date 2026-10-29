@@ -53,7 +53,7 @@ Before live verification:
 1. Add the Wix Blog required product in Developer Center.
 2. Add the Wix permissions listed above and approve the app update on an isolated development site.
 3. Install Wix Blog on that development site and ensure the app-owned `WorkflowAccess` collection is provisioned with `PRIVILEGED` permissions.
-4. Set `OPENAI_API_KEY` and, if desired, `OPENAI_MODEL` as server variables.
+4. Set `WIX_AI_MODEL` if a non-default model is needed. The current implementation does not require a separate provider API key.
 5. Place the member widget on `/admin`, `/admin/workflow`, and `/admin/permission-denied`. On `/admin/workflow`, stretch it wide and increase its height to show the brief and review fields; existing placements may retain their previous dimensions.
 6. Run `wix dev` and follow the manual sign-off cases in [ADMIN-AUTH-FLOW.md](./ADMIN-AUTH-FLOW.md).
 
