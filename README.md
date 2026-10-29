@@ -2,6 +2,16 @@
 
 This Wix CLI/Astro app gives approved site members a basic workflow for generating, reviewing, editing, and explicitly saving unpublished Wix Blog drafts. Wix site-member authentication is reused. The server checks each member's approval before generation or draft creation, validates generated article data, and checks Wix Blog installation before saving a draft.
 
+## Developer and agent documentation
+
+- [Agent instructions and documentation map](agent-files/AGENTS.md)
+- [Current implementation context and active work](agent-files/Agents_Context.md)
+- [Architecture, security boundaries, and planned media embedding](agent-files/ARCHITECTURE.md)
+- [AI-assisted development workflow](agent-files/AI-WORKFLOW.md)
+- [Authentication and manual sign-off](agent-files/ADMIN-AUTH-FLOW.md)
+- [Wix permissions and development-site setup](agent-files/WIX-PERMISSIONS.md)
+
+
 ## Basic member workflow
 
 1. A member signs in through Wix at `/admin`.

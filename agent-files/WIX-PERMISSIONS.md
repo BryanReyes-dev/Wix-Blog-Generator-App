@@ -9,6 +9,7 @@ Request only the scopes needed by the current implementation:
 | Scope | Purpose |
 | --- | --- |
 | `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create a Wix Blog draft. The request explicitly sends `publish: false`. |
+| `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — Invoke AI Models | Generate article content through the Wix-managed `@wix/ai` integration. |
 | `SCOPE.DC.MANAGE-YOUR-APP` — Manage Your App | Call `appInstances.getAppInstance()` as the app and verify Wix Blog's installed app ID. |
 | `SCOPE.DC-MEMBERS.READ-MEMBERS` — Read Members | Read the live member directory for the dashboard. Calls are made without elevation, so Wix also evaluates the dashboard user's role. |
 | `SCOPE.PROMOTE.MANAGE-SEO` — Manage SEO Settings | Keep the existing AI Credits balance inspection working. It does not generate content. |
@@ -33,14 +34,17 @@ Member workflow endpoints require an active `MEMBER` token and a successful appr
 
 On an already-installed app, changes to a data collection extension or new app scopes require the appropriate Wix app version/update and site approval before they work on the development site. This code change does not release the app or alter site settings.
 
-## OpenAI configuration
+## Wix AI configuration
 
-The Wix AI Credits integration only exposes `aiCredits.getBalance()` in the installed SDK; it does not generate content. Article generation uses OpenAI's Responses API from the server with Structured Outputs.
+Article generation uses the Wix-managed AI provider from `@wix/ai` with the Vercel AI SDK. The separate AI Credits integration exposes the existing credit-balance inspection; it is not the article-generation implementation.
 
-- `OPENAI_API_KEY`: required secret server variable.
-- `OPENAI_MODEL`: optional server variable; defaults to `gpt-5.4-mini`.
+- `WIX_AI_MODEL`: optional server-side setting; defaults to `gpt-5-mini`. Choose a model supported by the current Wix AI SDK.
+- `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS`: required Wix permission for invoking the managed AI model.
+- A standalone `OPENAI_API_KEY` is not required by the current implementation.
 
-Store the key with `wix env set --key OPENAI_API_KEY --value <your-key>`. For local development, `wix env pull` places Wix variables into `.env.local`, which is ignored by Git. `.env.example` lists the names without credentials. Do not use a `PUBLIC_` prefix.
+Use Wix CLI environment commands to configure server-side variables, for example `wix env set --key WIX_AI_MODEL --value <supported-model-id>`. Use `wix env pull` for local development when needed; local environment files must remain ignored by Git. Never expose server variables through a `PUBLIC_` prefix.
+
+Wix's AI API and provider behavior may be Developer Preview. Verify the current API docs and the actual development-site permissions/credit behavior instead of assuming that a displayed balance proves which wallet a generation request consumes.
 
 ## Development-site setup still required
 

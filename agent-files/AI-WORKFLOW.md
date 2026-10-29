@@ -88,21 +88,24 @@ Run the relevant checks and report their actual outcomes. Do not commit, push,
 merge, release, or switch branches without my explicit direction.
 ```
 
-## Wix Blog Generator app: current login prototype
+## Current Wix Blog Generator workflow
 
-The `feature/member-login-test` branch contains a site widget at
-`src/extensions/site/widgets/member-login-test/`. It currently asks Wix for the
-current site member, calls Wix's login prompt, and calls logout. Treat it as a
-prototype until it has been exercised in a Wix development site. A site-member
-session is not automatically equivalent to authorization for an app dashboard.
+This repository now has an approved-member workflow for generating, reviewing, editing, and explicitly saving unpublished Wix Blog drafts. It is not just a login prototype.
 
-Use current official Wix documentation for login and CLI behavior:
+Before a substantial change, also read:
 
-- [About the Wix CLI](https://dev.wix.com/docs/wix-cli/guides/about-the-wix-cli)
-- [Add a Custom Element Extension](https://dev.wix.com/docs/build-apps/develop-your-app/frameworks/wix-cli/supported-extensions/site/custom-elements/add-a-custom-element-extension-with-the-wix-cli)
-- [Wix site-member promptLogin API](https://dev.wix.com/docs/sdk/frontend-modules/members/authentication/prompt-login)
-- [Wix currentMember getMember API](https://dev.wix.com/docs/sdk/frontend-modules/members/current-member/get-member)
+- [Repository-specific agent instructions](./AGENTS.md)
+- [Current working context](./Agents_Context.md)
+- [Architecture and current/planned boundaries](./ARCHITECTURE.md)
+- [Authentication and manual sign-off](./ADMIN-AUTH-FLOW.md) when touching member or admin access
+- [Wix permissions and setup](./WIX-PERMISSIONS.md) when touching scopes, app installation, AI, Media Manager, or Blog APIs
 
-Do not replace the existing Wix member flow with a custom credential flow unless
-the framework's supported authentication model has been checked and the change is
-explicitly required.
+Current implementation boundaries:
+
+- Wix owns site-member login. Protected server routes verify Wix identity and check the app-owned approval record; a hidden page or widget redirect is not the security boundary.
+- Article generation uses the Wix-managed @wix/ai integration with the Vercel AI SDK. WIX_AI_MODEL selects the model and defaults to gpt-5-mini. Do not configure or require a standalone OPENAI_API_KEY unless the implementation and architecture are deliberately changed.
+- Research links and citation validation are implemented as a separate server concern from media references.
+- Current media uploads are sent to the model as derived JPEG frames. The original files are not uploaded to Wix Media Manager, and article content does not yet contain uploaded-media placements. Consult ARCHITECTURE.md and Agents_Context.md before implementing this feature; retain original GIF data instead of reusing JPEG analysis frames.
+- Draft creation happens only after the member explicitly submits the reviewed article, verifies the generating member, and checks that Wix Blog is installed. The create call uses publish: false.
+
+Use the installed Wix app skills and current official documentation for Wix API work. The repository's Wix SDK contracts, app permissions, and live-site behavior can change. Do not assume that a successful typecheck/build proves end-to-end permission, Media Manager upload, or Blog rendering behavior.
