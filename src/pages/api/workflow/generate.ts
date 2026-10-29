@@ -12,7 +12,7 @@ import {
   parseResearchLinkEntries,
   ResearchSourceError,
 } from '../../../lib/server/research-sources';
-import { parseMediaReferences } from '../../../lib/server/media-references';
+import { MediaReferenceError, parseMediaReferences } from '../../../lib/server/media-references';
 
 type ServerEnvironment = ImportMetaEnv & {
   WIX_AI_MODEL?: string;
@@ -73,6 +73,9 @@ export const POST: APIRoute = async ({ request }) => {
   } catch (error) {
     if (error instanceof ResearchSourceError) {
       return jsonResponse({ error: error.message }, error.status);
+    }
+    if (error instanceof MediaReferenceError) {
+      return jsonResponse({ error: error.message }, 400);
     }
     if (error instanceof InputValidationError) {
       return jsonResponse({ error: error.message }, 400);
