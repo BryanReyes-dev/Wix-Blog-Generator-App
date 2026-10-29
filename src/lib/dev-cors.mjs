@@ -5,6 +5,7 @@ const WIX_ORIGIN_PATTERNS = [
   /^https:\/\/[a-z0-9-]+\.wixsite\.com$/i,
   /^https:\/\/[a-z0-9-]+\.wixstudio\.io$/i,
   /^https:\/\/[a-z0-9-]+\.wix\.run$/i,
+  /^https:\/\/dev-[a-z0-9-]+\.wixdev-sites\.org$/i,
 ];
 
 function parseExplicitOrigins(value) {
