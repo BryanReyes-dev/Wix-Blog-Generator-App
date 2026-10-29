@@ -27,8 +27,8 @@ export const GET: APIRoute = async () => {
     const statusCode = err.statusCode ?? err.status ?? details.statusCode ?? details.status ?? null;
     const requestId = err.requestId ?? details.requestId ?? null;
     const message = (error instanceof Error ? error.message : String(error))
-      .replace(/Bearer\\s+\\S+/gi, 'Bearer [redacted]')
-      .replace(/\\s+/g, ' ')
+      .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/\s+/g, ' ')
       .slice(0, 200);
 
     console.error('[workflow-access] Approval lookup failed:', {
