@@ -161,7 +161,7 @@ function articleBody(article: GeneratedArticle, sources: ResearchSource[] = []):
 }
 
 function appendSafePreviewText(parent: HTMLElement, value: string, sources: ResearchSource[]) {
-  const tokens = value.split(/(\[S\d+\]|https?:\/\/[^\s<>"']+)/g).filter(Boolean);
+  const tokens = value.split(/(\[S\d+\]|https?:\/\/[^\s<>"']+|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g).filter(Boolean);
 
   for (const token of tokens) {
     const citation = /^\[(S\d+)\]$/.exec(token);
@@ -180,6 +180,19 @@ function appendSafePreviewText(parent: HTMLElement, value: string, sources: Rese
       } else {
         parent.appendChild(document.createTextNode(token));
       }
+      continue;
+    }
+
+    if (token.startsWith('**') && token.endsWith('**')) {
+      const strong = element('strong');
+      appendSafePreviewText(strong, token.slice(2, -2), sources);
+      parent.appendChild(strong);
+      continue;
+    }
+    if (token.startsWith('*') && token.endsWith('*')) {
+      const emphasis = element('em');
+      appendSafePreviewText(emphasis, token.slice(1, -1), sources);
+      parent.appendChild(emphasis);
       continue;
     }
 
@@ -250,6 +263,16 @@ function renderPreviewContent(parent: HTMLElement, body: string, sources: Resear
       const item = element('li');
       appendSafePreviewText(item, listMatch[1] ?? '', sources);
       list.appendChild(item);
+      continue;
+    }
+
+    const quoteMatch = /^>\s?(.+)$/.exec(trimmed);
+    if (quoteMatch) {
+      flushParagraph();
+      list = null;
+      const quote = element('blockquote');
+      appendSafePreviewText(quote, quoteMatch[1] ?? '', sources);
+      parent.appendChild(quote);
       continue;
     }
 
