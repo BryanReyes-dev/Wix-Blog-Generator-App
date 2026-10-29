@@ -454,8 +454,13 @@ test('draft rich content turns verified citation markers and source URLs into re
     '## Research\n\nA grounded claim [S1].\n\n## Sources\n\n- [S1] Public research article — https://public.example.com/article',
     sources,
   );
-  const textNodes = document.nodes.flatMap((node) => node.nodes ?? [])
-    .filter((node) => node.type === 'TEXT');
+  const allNodes = [];
+  const visit = (node) => {
+    allNodes.push(node);
+    for (const child of node.nodes ?? []) visit(child);
+  };
+  document.nodes.forEach(visit);
+  const textNodes = allNodes.filter((node) => node.type === 'TEXT');
   const linkedCitation = textNodes.find((node) => node.textData?.text === '[S1]');
   assert.equal(linkedCitation?.textData?.decorations[0]?.type, 'LINK');
   assert.equal(linkedCitation?.textData?.decorations[0]?.linkData?.link?.url, source.url);
