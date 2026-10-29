@@ -36,12 +36,12 @@ export const POST: APIRoute = async ({ request }) => {
     const brief = parseBlogBrief(body);
     const input = body as Record<string, unknown>;
     const researchLinks = parseResearchLinkEntries(input.researchLinks ?? input.researchUrls);
+    const mediaReferences = parseMediaReferences(input.mediaReferences);
     const loadedSources = await loadResearchSources(researchLinks.map((link) => link.url));
     const researchSources = loadedSources.map((source, index) => ({
       ...source,
       userNotes: researchLinks[index]?.notes || undefined,
     }));
-    const mediaReferences = parseMediaReferences(input.mediaReferences);
     const environment = import.meta.env as ServerEnvironment;
     const generated = await generateBlogArticle(brief, {
       model: environment.WIX_AI_MODEL?.trim() || 'gpt-5-mini',
