@@ -52,7 +52,7 @@ Then run the app on the Wix development site. Test generation as an approved sit
 
 ### Local development CORS
 
-The site widget calls the local Astro server from a Wix-hosted page, so those requests are cross-origin during `wix dev`. The dev server allows localhost and HTTPS origins under Wix-managed `wix.com`, `wixsite.com`, `wixstudio.io`, and `wix.run` domains. If the development site is being viewed through a custom domain, set its exact origin when starting the dev server:
+The site widget calls the local Astro server from a Wix-hosted page, so those requests are cross-origin during `wix dev`. The dev server allows localhost and HTTPS origins under Wix-managed `wix.com`, `wixsite.com`, `wixstudio.io`, and `wix.run` domains, plus Wix development preview hosts matching `https://dev-<site-id>.wixdev-sites.org`. If the development site is being viewed through another custom domain, set its exact origin when starting the dev server:
 
 ```sh
 WIX_DEV_CORS_ORIGINS="https://your-development-domain.example" npm run dev
