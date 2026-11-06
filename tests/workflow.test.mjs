@@ -437,9 +437,9 @@ test('Wix AI receives research excerpts and per-link focus notes when sources ar
     {
       model: 'gpt-5-mini',
       researchSources: sources,
-      generateText: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { text: JSON.stringify(article) };
+        return { output: article };
       },
     },
   );
@@ -597,9 +597,9 @@ test('Wix AI generation forwards visual references to the generator adapter', as
     {
       model: 'gpt-5-mini',
       mediaReferences,
-      generateText: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { text: JSON.stringify(validArticle()) };
+        return { output: validArticle() };
       },
     },
   );
