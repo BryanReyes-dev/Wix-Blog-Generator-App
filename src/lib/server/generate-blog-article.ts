@@ -5,7 +5,7 @@ import {
   InputValidationError,
   parseGeneratedArticle,
   type BlogBrief,
-} from './blog-content';
+} from './blog-content.ts';
 import type { ResearchSource } from './research-sources';
 import type { MediaReference } from './media-references';
 
