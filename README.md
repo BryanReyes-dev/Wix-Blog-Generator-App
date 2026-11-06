@@ -87,11 +87,12 @@ Separate multiple exact origins with commas. Do not include URL paths, and do no
 
 Research-link import currently accepts up to five URLs to public HTML or plain-text pages. It rejects IP-literal and local/private destinations, rechecks redirects, applies a ten-second fetch timeout and a one-megabyte response cap, and provides source IDs for inline citations. Generated source markers are mapped to Ricos link decorations when saving a draft. Webpage excerpts are untrusted content; the generation prompt instructs the model to treat them as research rather than instructions.
 
-The preview is a local approximation of the article's headings, paragraphs, lists, citations, and links. Wix's published blog theme still controls final presentation. The workflow UI is full-width and responsive, defaults to dark mode, and offers a saved light-mode preference. Text preferences and source-link notes are stored in browser local storage scoped to the verified Wix member ID; selected media files are session-only and are not persisted. General search-engine discovery, PDF/document ingestion, direct upload to Wix Media Manager, and automatic media embedding in draft posts are not implemented in this slice.
+The preview renders the structured article blocks, citations, original image placements, and supported styling in desktop and mobile frames. It is not a pixel-identical rendering of the complete Wix page: the site's global theme, header, footer, and theme-specific layout remain controlled by Wix and must be verified on the development site. The editor uploads original JPEG, PNG, WebP, and GIF assets to Wix Media Manager; GIF animation is preserved. The separate generation-page reference uploader still sends derived image frames/video stills to Wix AI for context only. General search-engine discovery, PDF/document ingestion, and embedded article video uploads are not implemented.
 
 ## Important limitations
 
 - Wix AI APIs are Developer Preview.
-- This branch's code changes do not themselves grant the new Wix permission scope or install Wix Blog on the development site.
+- The editorial image uploader requires both `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` and `SCOPE.DC-MEDIA.READ-MEDIAMANAGER`; these must be added to the Wix app and approved on the development site.
+- This branch's code changes do not themselves grant the new Wix permission scopes or install Wix Blog on the development site.
 - A successful build or mocked test does not verify live Wix AI authorization, credit billing identity, or Wix Blog draft creation.
 - No app release or production site settings are changed by these source changes.
