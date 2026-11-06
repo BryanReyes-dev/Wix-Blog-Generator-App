@@ -199,9 +199,9 @@ test('Wix AI generation uses the managed provider and requests a structured arti
     { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [] },
     {
       model: 'gpt-5-mini',
-      generateObject: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { object: validArticle() };
+        return { output: validArticle() };
       },
     },
   );
@@ -233,7 +233,7 @@ test('Wix AI generation rejects empty model configuration and invalid article ob
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateObject: async () => ({ object: { ...validArticle(), sections: [] } }),
+      generateStructuredOutput: async () => ({ output: { ...validArticle(), sections: [] } }),
     }),
     (error) => error instanceof AiProviderError && error.status === 502 && /required format/i.test(error.message),
   );
@@ -241,8 +241,8 @@ test('Wix AI generation rejects empty model configuration and invalid article ob
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateObject: async () => {
-        const error = new Error('No object generated');
+      generateStructuredOutput: async () => {
+        const error = new Error('No structured output generated');
         error.name = 'NoObjectGeneratedError';
         throw error;
       },
@@ -259,8 +259,8 @@ test('Wix AI response-limit failures return actionable feedback', async () => {
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateObject: async () => {
-        const error = new Error('No object generated');
+      generateStructuredOutput: async () => {
+        const error = new Error('No structured output generated');
         error.name = 'NoObjectGeneratedError';
         error.finishReason = 'length';
         throw error;
@@ -278,7 +278,7 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateObject: async () => { const error = new Error('timeout'); error.name = 'TimeoutError'; throw error; },
+      generateStructuredOutput: async () => { const error = new Error('timeout'); error.name = 'TimeoutError'; throw error; },
     }),
     (error) => error instanceof AiProviderError && error.status === 504,
   );
@@ -286,7 +286,7 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateObject: async () => { throw new Error('permission denied'); },
+      generateStructuredOutput: async () => { throw new Error('permission denied'); },
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );

@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, Output } from 'ai';
 import { openai } from '@wix/ai';
 import { z } from 'zod';
 import {
@@ -39,7 +39,7 @@ const articleOutputSchema = z.object({
 export type ArticleGeneratorConfig = {
   model: string;
   /** Injection point for deterministic tests; production uses Wix's managed AI provider. */
-  generateObject?: (args: {
+  generateStructuredOutput?: (args: {
     model: ReturnType<typeof openai.responses>;
     schema: typeof articleOutputSchema;
     system: string;
@@ -47,7 +47,7 @@ export type ArticleGeneratorConfig = {
     maxOutputTokens: number;
     abortSignal: AbortSignal;
     mediaReferences?: MediaReference[];
-  }) => Promise<{ object: unknown }>;
+  }) => Promise<{ output: unknown }>;
   researchSources?: ResearchSource[];
   mediaReferences?: MediaReference[];
 };
@@ -103,7 +103,7 @@ export async function generateBlogArticle(
   ].join(' ');
 
   try {
-    const generate = config.generateObject ?? (async (args) => {
+    const generate = config.generateStructuredOutput ?? (async (args) => {
       const content: Array<
         | { type: 'text'; text: string }
         | { type: 'image'; image: string; mediaType: 'image/jpeg' }
@@ -119,15 +119,15 @@ export async function generateBlogArticle(
         }
       }
 
-      const result = await generateObject({
+      const result = await generateText({
         model: args.model,
-        schema: args.schema,
+        output: Output.object({ schema: args.schema }),
         system: args.system,
         messages: [{ role: 'user', content }],
         maxOutputTokens: args.maxOutputTokens,
         abortSignal: args.abortSignal,
       });
-      return { object: result.object };
+      return { output: result.output };
     });
 
     const result = await generate({
@@ -142,7 +142,7 @@ export async function generateBlogArticle(
       mediaReferences: config.mediaReferences,
     });
 
-    return parseGeneratedArticle(result.object);
+    return parseGeneratedArticle(result.output);
   } catch (error) {
     if (error instanceof AiProviderError) throw error;
     if (isTimeout(error)) {
@@ -154,7 +154,7 @@ export async function generateBlogArticle(
         502,
       );
     }
-    if (error instanceof InputValidationError || /NoObjectGeneratedError/.test(getErrorName(error) ?? '')) {
+    if (error instanceof InputValidationError || /No(?:Object|Output)GeneratedError/.test(getErrorName(error) ?? '')) {
       console.warn('[workflow/generate] Wix AI did not produce a valid structured article:', {
         name: getErrorName(error) ?? 'UnknownError',
         finishReason: getFinishReason(error) ?? 'unknown',
