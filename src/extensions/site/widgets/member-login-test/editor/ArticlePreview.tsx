@@ -47,12 +47,22 @@ function InlineText({ value, sources }: { value: string; sources: Props["sources
 
 function blockTextStyle(block: Exclude<ArticleBlock, { type: "image" }>, document: ArticleDocument): CSSProperties {
   const isHeading = block.type === "heading";
+  const alignment = block.style.textAlignment === "INHERIT"
+    ? document.appearance.textAlignment
+    : block.style.textAlignment;
+  const textAlign: CSSProperties["textAlign"] = alignment === "LEFT"
+    ? "left"
+    : alignment === "CENTER"
+      ? "center"
+      : alignment === "RIGHT"
+        ? "right"
+        : "justify";
   return {
     color: block.style.color || (isHeading ? document.appearance.headingColor : document.appearance.bodyColor),
     fontFamily: block.style.fontFamily || (isHeading ? document.appearance.headingFontFamily : document.appearance.bodyFontFamily),
     fontSize: (block.style.fontSize || (isHeading ? document.appearance.headingFontSize : document.appearance.bodyFontSize)) + "px",
     lineHeight: block.style.lineHeight || document.appearance.lineHeight,
-    textAlign: block.style.textAlignment === "INHERIT" ? document.appearance.textAlignment : block.style.textAlignment,
+    textAlign,
     backgroundColor: block.style.backgroundColor || undefined,
     paddingTop: block.style.paddingTop ? block.style.paddingTop + "px" : undefined,
     paddingBottom: block.style.paddingBottom ? block.style.paddingBottom + "px" : undefined,

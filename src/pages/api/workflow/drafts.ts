@@ -5,7 +5,7 @@ import { files } from '@wix/media';
 import { auth } from '@wix/essentials';
 import { handleApiError, jsonResponse, requireApprovedSiteMember } from '../../../lib/server/access-control';
 import { ApiError } from '../../../lib/server/authorization-core';
-import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/server/blog-content';
+import { bodyToRichContent, InputValidationError, parseDraftSubmission, type WixRichContent } from '../../../lib/server/blog-content';
 import { articleDocumentToPlainText, articleDocumentToRichContent, ArticleDocumentError, parseArticleDocument } from '../../../lib/article-document';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
@@ -141,9 +141,9 @@ export const POST: APIRoute = async ({ request }) => {
     if (articleDocument && articleDocumentToPlainText(articleDocument).trim() !== submission.body) {
       throw new InputValidationError('The submitted article text does not match its structured editor document. Refresh the editor and try again.');
     }
-    const richContent: NonNullable<Parameters<typeof draftPosts.createDraftPost>[0]['richContent']> = articleDocument
-      ? articleDocumentToRichContent(articleDocument, citationSources) as NonNullable<Parameters<typeof draftPosts.createDraftPost>[0]['richContent']>
-      : bodyToRichContent(submission.body, citationSources) as NonNullable<Parameters<typeof draftPosts.createDraftPost>[0]['richContent']>;
+    const richContent: WixRichContent = articleDocument
+      ? articleDocumentToRichContent(articleDocument, citationSources) as unknown as WixRichContent
+      : bodyToRichContent(submission.body, citationSources);
 
     await verifyArticleMediaOwnership(articleDocument);
     await verifyWixBlogInstalled();
