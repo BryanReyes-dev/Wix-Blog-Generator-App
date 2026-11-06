@@ -38,6 +38,8 @@ The structured document converts to Wix Ricos nodes for headings, paragraphs, li
 
 ## Wix AI and packages
 
+The editor uses `@wix/media` for server-authorized original image uploads and Media Manager readiness checks.
+
 Generation uses the Wix AI SDK rather than a direct OpenAI API key. Wix handles AI provider authentication and billing for Wix apps. The AI APIs are currently documented as **Developer Preview**, so their behavior and SDK contracts may change.
 
 Required packages are included in `package.json`:

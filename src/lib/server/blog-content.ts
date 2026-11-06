@@ -173,12 +173,29 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     throw new InputValidationError('A valid submission ID is required.');
   }
 
+  const seoSlug = typeof input.seoSlug === 'string' ? input.seoSlug.trim() : '';
+  if (seoSlug.length > 100 || (seoSlug && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(seoSlug))) {
+    throw new InputValidationError('The SEO URL slug must use lowercase letters, numbers, and single hyphens.');
+  }
+  const tags = input.hashtags === undefined ? [] : input.hashtags;
+  if (!Array.isArray(tags) || tags.length > 100) {
+    throw new InputValidationError('Use no more than 100 article tags.');
+  }
+  const hashtags = tags.map((tag, index) => requiredText(tag, 'Article tag ' + (index + 1), 100));
+  const featured = input.featured === undefined ? false : input.featured;
+  if (typeof featured !== 'boolean') {
+    throw new InputValidationError('The featured setting must be a boolean value.');
+  }
+
   return {
     submissionId,
     title: requiredText(input.title, 'Draft title', BLOG_TITLE_MAX_LENGTH),
     body: requiredText(input.body, 'Article content', BLOG_BODY_MAX_LENGTH),
     metaDescription: requiredText(input.metaDescription, 'Meta description', BLOG_EXCERPT_MAX_LENGTH),
     seoKeywords: keywordList(input.seoKeywords, 'SEO keyword'),
+    seoSlug,
+    hashtags,
+    featured,
   };
 }
 
