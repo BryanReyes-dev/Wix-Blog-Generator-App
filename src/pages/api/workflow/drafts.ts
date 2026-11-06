@@ -51,7 +51,7 @@ async function verifyArticleMediaOwnership(
       descriptor.private === true ||
       url !== block.media.url
     ) {
-      throw new ArticleDocumentError('An article image is not a ready, public upload from this Wix site's editorial workspace. Remove it and upload it again.');
+      throw new ArticleDocumentError("An article image is not a ready, public upload from this Wix site's editorial workspace. Remove it and upload it again.");
     }
   }));
 }
