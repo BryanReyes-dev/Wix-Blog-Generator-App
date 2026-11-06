@@ -608,7 +608,7 @@ test('custom development origins must be explicitly configured as exact HTTPS or
 test('structured article documents preserve block order, formatting, and Ricos styling', () => {
   let sequence = 0;
   const document = articleBodyToDocument(
-    '## Editorial section\\n\\nA **bold** paragraph with an inline *emphasis*.\\n\\n- First point\\n- Second point\\n\\n> A pull quote.',
+    '## Editorial section\n\nA **bold** paragraph with an inline *emphasis*.\n\n- First point\n- Second point\n\n> A pull quote.',
     () => 'block-' + (++sequence),
   );
   const parsed = parseArticleDocument(document);
