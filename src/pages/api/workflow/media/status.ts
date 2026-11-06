@@ -58,7 +58,7 @@ export const GET: APIRoute = async ({ request }) => {
     if (
       mediaType !== "IMAGE" ||
       mediaState !== "OK" ||
-      root.private === true ||
+      root.private !== false ||
       !id ||
       !mimeType ||
       !parsedUrl ||

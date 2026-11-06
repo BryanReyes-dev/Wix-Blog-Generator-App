@@ -11,6 +11,15 @@ import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
 import { parseResearchCitationSources, ResearchSourceError } from '../../../lib/server/research-sources';
 
+function imageMimeTypeFromName(name: string): string | null {
+  const extension = name.split('.').pop()?.toLowerCase();
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  if (extension === 'gif') return 'image/gif';
+  return null;
+}
+
 async function verifyArticleMediaOwnership(
   articleDocument: ReturnType<typeof parseArticleDocument> | null,
 ): Promise<void> {
@@ -36,6 +45,10 @@ async function verifyArticleMediaOwnership(
     const descriptor = root as Record<string, unknown>;
     const displayName = typeof descriptor.displayName === 'string' ? descriptor.displayName : '';
     const expectedPrefix = 'blog-editor-' + block.media.uploadToken + '-';
+    const uploadedName = displayName.startsWith(expectedPrefix)
+      ? displayName.slice(expectedPrefix.length)
+      : '';
+    const uploadedMimeType = imageMimeTypeFromName(uploadedName);
     const id = typeof descriptor._id === 'string'
       ? descriptor._id
       : typeof descriptor.id === 'string'
@@ -44,11 +57,12 @@ async function verifyArticleMediaOwnership(
     const url = typeof descriptor.url === 'string' ? descriptor.url : '';
     if (
       !displayName.startsWith(expectedPrefix) ||
+      uploadedMimeType !== block.media.mimeType ||
       id !== block.media.id ||
       descriptor.mediaType !== 'IMAGE' ||
       descriptor.operationStatus !== 'READY' ||
       descriptor.state !== 'OK' ||
-      descriptor.private === true ||
+      descriptor.private !== false ||
       url !== block.media.url
     ) {
       throw new ArticleDocumentError("An article image is not a ready, public upload from this Wix site's editorial workspace. Remove it and upload it again.");
