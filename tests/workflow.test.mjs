@@ -18,6 +18,7 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { articleBodyToDocument, articleDocumentToPlainText, articleDocumentToRichContent, parseArticleDocument } from '../src/lib/article-document.ts';
 import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
 import { MAX_MEDIA_FRAMES, parseMediaReferences } from '../src/lib/server/media-references.ts';
 import {
@@ -602,4 +603,97 @@ test('custom development origins must be explicitly configured as exact HTTPS or
   assert.equal(isAllowedDevCorsOrigin('https://another-domain.example', customOrigin), false);
   assert.throws(() => getAllowedDevCorsOrigins('https://my-domain.example/path'), /exact HTTPS origins/);
   assert.throws(() => getAllowedDevCorsOrigins('http://my-domain.example'), /exact HTTPS origins/);
+});
+
+test('structured article documents preserve block order, formatting, and Ricos styling', () => {
+  let sequence = 0;
+  const document = articleBodyToDocument(
+    '## Editorial section\\n\\nA **bold** paragraph with an inline *emphasis*.\\n\\n- First point\\n- Second point\\n\\n> A pull quote.',
+    () => 'block-' + (++sequence),
+  );
+  const parsed = parseArticleDocument(document);
+  const richContent = articleDocumentToRichContent(parsed);
+  assert.equal(richContent.nodes[0]?.type, 'HEADING');
+  assert.equal(richContent.nodes[1]?.type, 'PARAGRAPH');
+  assert.equal(richContent.nodes.some((node) => node.type === 'BULLETED_LIST'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'BLOCKQUOTE'), true);
+  assert.match(articleDocumentToPlainText(parsed), /## Editorial section/);
+  const paragraph = richContent.nodes.find((node) => node.type === 'PARAGRAPH');
+  assert.equal(paragraph?.paragraphData?.textStyle?.fontSize?.value, 17);
+});
+
+test('structured article documents preserve original GIF media and image layout settings', () => {
+  const document = {
+    appearance: {
+      bodyFontFamily: 'Georgia', headingFontFamily: 'Arial', bodyFontSize: 18,
+      headingFontSize: 32, bodyColor: '#344054', headingColor: '#172033',
+      canvasColor: '#F8FAFC', lineHeight: 1.8, textAlignment: 'LEFT',
+    },
+    blocks: [{
+      id: 'gif-1', type: 'image',
+      media: {
+        id: 'wix-media-id',
+        url: 'https://static.wixstatic.com/media/example~mv2.gif',
+        name: 'animated.gif', mimeType: 'image/gif',
+        uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+        width: 800, height: 450,
+      },
+      altText: 'Animated clothing detail', caption: 'The original animated GIF',
+      alignment: 'LEFT', width: 'SMALL', textWrap: true,
+      borderWidth: 2, borderColor: '#AABBCC', borderRadius: 8,
+    }],
+  };
+  const richContent = articleDocumentToRichContent(document);
+  const imageNode = richContent.nodes[0];
+  assert.equal(imageNode?.type, 'IMAGE');
+  assert.equal(imageNode?.imageData?.image?.src?.id, 'wix-media-id');
+  assert.equal(imageNode?.imageData?.containerData?.textWrap, true);
+  assert.equal(imageNode?.imageData?.containerData?.width?.size, 'SMALL');
+  assert.equal(imageNode?.imageData?.styles?.border?.radius, 8);
+  assert.equal(imageNode?.imageData?.altText, 'Animated clothing detail');
+});
+
+test('structured article documents reject invalid media, arbitrary URLs, and missing alt text', () => {
+  const base = {
+    appearance: {},
+    blocks: [{
+      id: 'image-1', type: 'image',
+      media: {
+        id: 'id', url: 'https://example.com/image.jpg', name: 'image.jpg',
+        mimeType: 'image/jpeg', uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+        width: 800, height: 600,
+      },
+      altText: 'Image', caption: '', alignment: 'CENTER', width: 'CONTENT',
+      textWrap: false, borderWidth: 0, borderColor: '#D0D5DD', borderRadius: 0,
+    }],
+  };
+  assert.throws(() => parseArticleDocument(base), /Wix Media Manager/);
+  assert.throws(() => parseArticleDocument({
+    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg', uploadToken: 'invalid' } }],
+  }), /verified editor upload/);
+  assert.throws(() => parseArticleDocument({
+    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg' }, altText: '' }],
+  }), /alternative text/);
+  assert.throws(() => parseArticleDocument({
+    appearance: { bodyFontSize: 200 },
+    blocks: [{ id: 'p1', type: 'paragraph', text: 'Text', style: {} }],
+  }), /Body font size/);
+});
+
+test('draft submission parser validates SEO slug, tags, and featured status', () => {
+  const parsed = parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title, body: 'Article body.',
+    metaDescription: validArticle().metaDescription, seoKeywords: [],
+    seoSlug: 'a-practical-guide', hashtags: ['style', 'fashion'], featured: true,
+  });
+  assert.equal(parsed.seoSlug, 'a-practical-guide');
+  assert.deepEqual(parsed.hashtags, ['style', 'fashion']);
+  assert.equal(parsed.featured, true);
+  assert.throws(() => parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title, body: 'Article body.',
+    metaDescription: validArticle().metaDescription, seoKeywords: [],
+    seoSlug: '../unsafe',
+  }), /SEO URL slug/);
 });

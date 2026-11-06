@@ -39,6 +39,9 @@ export type DraftSubmission = {
   body: string;
   metaDescription: string;
   seoKeywords: string[];
+  seoSlug: string;
+  hashtags: string[];
+  featured: boolean;
 };
 
 type RichTextDecoration =

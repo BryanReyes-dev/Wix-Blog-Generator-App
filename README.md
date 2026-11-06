@@ -20,11 +20,21 @@ This Wix CLI/Astro app gives approved site members a basic workflow for generati
 4. The server calls the Wix AI SDK, then validates the returned article on the server.
 5. Members can add up to five public webpage URLs with optional per-link focus notes. The server checks each destination, retrieves a bounded HTML or plain-text excerpt, and passes the excerpts and focus notes to Wix AI.
 6. Members can attach up to four local image/video references. Images are resized to JPEG frames in the browser; videos are sampled into up to three still frames each. The frames and optional notes are sent to Wix AI for visual context. Video audio is not analyzed, originals are not stored by this app, and media is not automatically embedded into the final blog post.
-7. The server checks generated citation markers against the retrieved source IDs, and the editor shows source URLs alongside a live, visitor-style article preview.
-8. The member edits the title, article body, meta description, and SEO keywords before saving.
-9. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
+7. The server checks generated citation markers against the retrieved source IDs.
+8. Members edit the article in a responsive block editor. They can edit and reorder headings, paragraphs, lists, quotes, dividers, and images; adjust typography and supported block styling; and preview the article in desktop or mobile dimensions.
+9. Editors can insert original JPEG, PNG, WebP, and GIF images from Wix Media Manager. GIF files retain their original format. Image blocks support required alternative text, captions, alignment, width, supported text wrapping, and borders.
+10. Editors complete the SEO slug, meta description, keywords, tags, and featured setting.
+11. Only after the member selects **Create unpublished draft** does the server verify media and Wix Blog, then create a draft with `publish: false`.
 
 Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
+
+## Editorial workspace and preview
+
+The editor and preview share one validated structured article document. Reusable React components provide article blocks, appearance settings, image properties, responsive editing/preview panes, and SEO controls. Larger screens show the editor and preview side by side; smaller screens use a workspace dropdown. The desktop/mobile preview renders article content and its saved rich-text settings, but it does not reproduce the Wix site's global theme, header, footer, or exact final page template.
+
+Original editor images are uploaded to Wix Media Manager through server-authorized signed upload URLs. JPEG, PNG, WebP, and GIF files are supported up to 10 MB each. The server validates image signatures, waits until Wix reports that the media is ready, and verifies that each referenced media ID belongs to a ready, public asset uploaded through this editor. GIFs are kept as original GIF files. The generation-page visual-reference uploader remains separate; its derived JPEG frames are context for Wix AI and are not automatically embedded in the post.
+
+The structured document converts to Wix Ricos nodes for headings, paragraphs, lists, quotes, dividers, links, images, supported typography, block backgrounds, spacing, and image layout. Global site styling remains controlled by the Wix Blog theme.
 
 ## Wix AI and packages
 

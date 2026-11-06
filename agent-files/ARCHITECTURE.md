@@ -14,16 +14,19 @@ The app uses Wix for member identity, app permissions, managed AI access, Media 
 
 ## 2. Current repository map
 
-- src/extensions/site/widgets/member-login-test/ — React site-member workflow UI, including research inputs, media-reference inputs, editable article fields, preview, and explicit draft-save action.
+- src/extensions/site/widgets/member-login-test/ — React site-member workflow UI, including research inputs, AI visual references, and the editorial workspace.
+- src/extensions/site/widgets/member-login-test/editor/ — reusable article block editor, appearance controls, review orchestration, preview, and icon components.
+- src/lib/article-document.ts — shared structured article model, validation, plain-text serialization, and Ricos conversion.
+- src/pages/api/workflow/media/ — approved-member Media Manager upload and readiness endpoints.
 - src/extensions/backend/data-collections/workflow-access.ts — app-owned approval collection.
 - src/pages/api/workflow/generate.ts — validates the approved member's brief, research links, and visual reference frames; loads research excerpts; calls the article generator; validates output and citation integrity.
-- src/pages/api/workflow/drafts.ts — validates draft submissions, verifies the author matches the authenticated member, verifies Wix Blog is installed, converts the article to Ricos, and creates an unpublished draft.
+- src/pages/api/workflow/drafts.ts — validates draft submissions and structured article documents, verifies the author and every referenced media upload, verifies Wix Blog is installed, and creates an unpublished draft.
 - src/pages/api/workflow-access.ts and src/pages/api/admin/ — approval checks and administrator-facing workflow access.
 - src/lib/server/access-control.ts and authorization-related modules — server-side identity and permission enforcement.
 - src/lib/server/generate-blog-article.ts — Wix AI-backed article generation and prompt construction.
 - src/lib/server/research-sources.ts — public research URL validation, retrieval, excerpt handling, and citation checks.
 - src/lib/server/media-references.ts — validation of derived JPEG frames passed to the model as visual context.
-- src/lib/server/blog-content.ts — brief/article validation and conversion of edited body text into Wix Ricos nodes.
+- src/lib/server/blog-content.ts — brief/article validation, legacy editable-body conversion, and SEO/tag/featured field validation.
 - agent-files/ — human/agent documentation, current context, architecture, workflow, permissions, and manual validation.
 
 ## 3. Request and authorization boundaries
@@ -59,51 +62,30 @@ The AI provider is the Wix-managed @wix/ai integration used with the Vercel AI S
 
 ## 5. Current draft-save flow
 
-The browser sends the reviewed title, editable article body, description, SEO keywords, submission identity, generating-member identity, and validated research source metadata to POST /api/workflow/drafts.
+The browser sends the reviewed title, structured article document, plain-text checksum, description, SEO settings, tags, featured flag, submission identity, generating-member identity, and validated research source metadata to POST /api/workflow/drafts.
 
-The server requires an approved member, validates the submitted data, ensures the current member is the one who generated the article, transforms the body into a Ricos document, checks that Wix Blog is installed, and calls the Wix Blog draft API with publish: false. A draft is reported as successful only when Wix confirms an UNPUBLISHED draft ID.
+The server requires an approved member, validates the submitted document and plain-text checksum, ensures the current member is the one who generated the article, verifies every embedded image against its Wix Media Manager descriptor and upload-token prefix, checks that Wix Blog is installed, and calls the Wix Blog draft API with publish: false. A draft is reported as successful only when Wix confirms an UNPUBLISHED draft ID. Legacy requests without a structured document continue through the previous Markdown-to-Ricos converter.
 
 Generation itself does not create a blog item. The application has no publish or scheduling endpoint. The duplicate-submission guard is in-process and is not a durable exactly-once guarantee.
 
-## 6. Current media behavior (implemented)
+## 6. Editorial workspace, media, and preview (implemented)
 
-Media files are currently used as model context only:
+The repository has two separate media paths:
 
-- The widget accepts JPEG, PNG, WebP, GIF, and selected video file types.
-- Image inputs are normalized to JPEG frames for model analysis.
-- Video inputs are represented by a limited set of sampled still frames; audio and unsampled moments are not analyzed.
-- The server validates frame counts, JPEG data-URL syntax, names, notes, and aggregate size.
-- Original files are not uploaded to Wix Media Manager through this workflow.
-- The generated article contract does not return media-placement instructions.
-- Ricos conversion currently produces text/list/link-oriented article nodes. It does not add uploaded IMAGE or VIDEO nodes.
-- The preview cannot show article media placements because these are not represented in the article model.
+- **AI visual references:** The generation form accepts JPEG, PNG, WebP, GIF, and selected video files. Images are normalized to JPEG frames and videos are sampled into still frames for model context. These references are not automatically embedded in the article.
+- **Original article media:** The editorial workspace lets an approved member insert JPEG, PNG, WebP, and GIF files directly into an article. The server generates a signed Wix Media Manager upload URL, validates the binary signature and a 10 MB size limit, uploads the original bytes, and polls the file descriptor until Wix reports `READY`. GIF originals remain GIFs.
 
-This distinction is intentional in the present code: visual reference frames help the model understand the brief, but they are not the assets embedded into the saved post.
+The editorial workspace uses one validated, typed `ArticleDocument` shared by the block editor, preview, and server-side Wix Ricos converter. The document supports headings, paragraphs, lists, quotes, dividers, and image blocks. Each image block carries the Wix Media ID, verified upload-token marker, dimensions, required alternative text, optional caption, width, alignment, text wrapping, and border settings.
 
-## 7. Planned media-embedding flow
+Typography controls support font families, sizes, text colors, heading colors, alignment, and line spacing. Block styling supports text/background colors and vertical padding. The preview displays the same article content and editor settings in desktop and mobile frames.
 
-### Product requirements
+The preview is an article-content preview, not a pixel-perfect preview of the entire Wix site. It does not reproduce the site's header, footer, Blog theme, site-wide background, or every theme-specific responsive behavior. The development site remains the final verification environment. Embedded video, arbitrary HTML/CSS, unrestricted website-theme editing, and drag-and-drop canvas positioning are not part of this implementation.
 
-The requested feature must turn selected source files into real article content while keeping analysis derivatives separate. The resulting layout must be readable and responsive, use appropriate media dimensions, maintain heading/list indentation and paragraph spacing, support text flow around aligned media when the destination's Ricos schema permits it, and preserve GIF animation. The local preview and the saved draft must reflect the same media placements.
+## 7. Upload and draft-save validation
 
-### Proposed flow (implementation details must be verified)
+Both media endpoints require an approved Wix member. The upload route keeps the signed URL server-side and accepts only JPEG, PNG, WebP, or GIF originals. The status route verifies the UUID upload token in the Media Manager display name and returns only a ready, public Wix-hosted image URL.
 
-1. **Retain original assets separately.** Keep each selected browser File and its metadata (name, MIME type, byte size, dimensions, notes) separate from JPEG frames sent to AI. Derivative frames are analysis-only and must never replace the originals.
-2. **Upload through Wix Media Manager.** Add a server-authorized upload flow using the supported Wix Media SDK after verifying the exact package, API method, permission scope, upload-size policy, and authorization pattern. Wix documents generated and resumable upload URLs; the signed upload URL should be used for the file transfer rather than embedding base64 file bytes in the article JSON. Files larger than 10 MB may require the resumable flow. Wait until an uploaded file is ready before using it in a draft.
-3. **Validate and identify uploaded assets.** Record the returned Wix Media ID and validated metadata in a server/client contract. Do not accept arbitrary file IDs from the model. Validate MIME type, file size, dimensions, and that each placement refers to an asset included in this workflow.
-4. **Produce placement metadata.** Extend the validated article representation with a typed placement plan, or use a separate planning step if that is safer. A placement should resolve to an asset and an article location (for example, after an existing section), and contain only supported layout fields plus accessible alt text and an optional caption. Model output is untrusted and must be parsed against the allowed asset IDs and layout options.
-5. **Build valid Ricos content.** Extend blog-content.ts to combine heading, paragraph, list, citation, image, and supported video nodes in deliberate order. Ricos media nodes reference Wix Media IDs, and image nodes require intrinsic width/height and descriptive alt text. Add spacer paragraphs where block spacing is needed; do not rely on newlines or arbitrary CSS to create saved-document spacing.
-6. **Preserve GIFs.** Upload the original GIF bytes with the original image/gif MIME type and reference the returned Wix Media ID in an IMAGE node. JPEG frames may still be sent to AI for visual analysis, but those frames are not the blog asset. Verify animation on both the development site's preview/rendering path and the saved draft.
-7. **Match preview to the saved document.** Render the same placement metadata and sizing/alignment choices in the widget's article preview. Avoid a preview-only layout that cannot be represented in Ricos, because it would mislead the author about the result.
-8. **Handle completion and failure safely.** Keep upload and draft-save states distinct. If a file has not finished processing, an upload fails, or placement validation fails, show an actionable error and do not claim the blog draft succeeded.
-
-### Layout and text wrapping
-
-Use the supported Ricos media container properties for width, alignment, caption, and spacing, and verify the exact IMAGE/VIDEO node schema against the current authoring recipe and Wix Blog behavior. The requirement is for appropriately sized media and text flow that respects the selected alignment where supported. Do not implement wrapping with widget CSS alone and imply it will persist in Wix Blog. If Wix Blog's supported IMAGE node cannot preserve floated text wrapping, document that limitation and use a clean, accessible supported layout rather than inserting untrusted raw HTML.
-
-### Permission and API constraints
-
-The current package list does not include @wix/media and current Wix app configuration has not been verified for Media Manager upload permission. Before implementation, confirm the necessary scope and elevated operation from current Wix documentation and the installed app setup. Server-side upload-URL generation must only be available to an authenticated approved member, must validate inputs, and must not expose general-purpose media-management capabilities to the browser.
+During draft creation, the server re-fetches each unique referenced media descriptor and checks its ID, upload-token prefix, public status, Wix URL, media type, ready state, and non-deleted state. The browser cannot submit an arbitrary external URL as a media block or claim an unrelated site image was uploaded through this editor. Both Media Manager scopes must be granted by the app owner before this works on the development site.
 
 ## 8. Security and reliability principles
 
