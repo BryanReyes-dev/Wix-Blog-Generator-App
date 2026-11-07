@@ -21,7 +21,8 @@ Wix owns member authentication, app permissions, managed AI access, Media Manage
 - `src/lib/article-document.ts` defines and validates the shared structured article document, serializes it, and converts it to Wix Ricos nodes.
 - Protected generation and draft endpoints are under `src/pages/api/workflow/`; media upload/status endpoints are nested under `media/`.
 - Server-side authorization, Wix AI generation, research retrieval, media verification, and draft logic live under `src/lib/server/`.
-- The admin dashboard extension and app-owned `WorkflowAccess` data collection are registered independently of the member widget.
+- The admin dashboard is registered independently of the member widget. Its `components/` folder contains the setup, summary, credits, and member-access React panels; `hooks/useAdminDashboard.ts` manages dashboard state/actions; `lib/admin-api.ts` wraps authenticated dashboard requests; and `types.ts` contains dashboard data contracts.
+- The app-owned `WorkflowAccess` data collection is registered in `src/extensions/backend/data-collections/`.
 
 ## Media paths
 

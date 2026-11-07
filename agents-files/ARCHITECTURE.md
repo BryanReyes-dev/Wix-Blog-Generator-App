@@ -50,7 +50,11 @@ src/
 - **`src/pages/api/`:** HTTP route handlers. Routes validate requests, derive context through Wix authentication, call server helpers, and return responses.
 - **`src/lib/article-document.ts`:** shared structured article document types, validation, plain-text serialization, and Ricos conversion.
 - **`src/lib/server/`:** server-only Wix authorization, access control, Wix AI generation, public research fetching, media reference validation, upload/draft verification, and submission handling.
-- **`src/extensions/dashboard/`:** administrator-facing member approvals and credit information.
+- **`src/extensions/dashboard/pages/ai-blog-generator/`:** administrator dashboard entry point.
+- **`ai-blog-generator/components/`:** React panels for setup checks, status summary, credits, and member access.
+- **`ai-blog-generator/hooks/useAdminDashboard.ts`:** dashboard loading, search, paging, and approval state/actions.
+- **`ai-blog-generator/lib/admin-api.ts`:** authenticated Wix dashboard API calls.
+- **`ai-blog-generator/types.ts`:** dashboard data contracts.
 - **`src/extensions/backend/data-collections/`:** app-owned `WorkflowAccess` collection registration and permissions.
 
 Components should render UI; hooks should manage reusable React state; non-React functions should remain ordinary modules; and authentication, permissions, data access, and content creation must remain server enforced.

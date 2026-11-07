@@ -24,7 +24,11 @@ Generation does not create a Blog item. Draft creation happens only after the me
 | `member-login/editor/` | Article block editor, appearance controls, preview, review, and image properties. |
 | `member-login/hooks/` | React state and side-effect logic for preferences and visual references. |
 | `member-login/lib/` | Browser-side API, preference, media-processing, style, and ID helpers. |
-| `src/extensions/dashboard/pages/ai-blog-generator/` | Administrator interface for approval, member access, and AI credit information. |
+| `src/extensions/dashboard/pages/ai-blog-generator/` | Administrator dashboard entry point and dashboard feature modules. |
+| `ai-blog-generator/components/` | Reusable React sections for setup status, summary cards, AI credits, and member access. |
+| `ai-blog-generator/hooks/` | React state and actions for dashboard data loading and access changes. |
+| `ai-blog-generator/lib/` | Authenticated Wix dashboard API calls. |
+| `ai-blog-generator/types.ts` | Shared dashboard data contracts. |
 | `src/extensions/backend/data-collections/` | App-owned workflow access collection. |
 | `src/pages/api/` | Astro HTTP endpoints for authentication checks, generation, media, drafts, and admin actions. |
 | `src/lib/article-document.ts` | Shared article document validation and conversion to Wix Ricos rich content. |
