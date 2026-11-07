@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { httpClient } from "@wix/essentials";
 import { location } from "@wix/site-location";
 import { authentication, currentMember } from "@wix/site-members";
 import "./../../../../styles/tailwind.css";
 import BlogWorkflow from "./blog-workflow";
+import AccessPanel, { BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "./components/AccessPanel";
+import type { MemberIdentity } from "./types";
 
 const ROUTES = {
   login: "/admin",
@@ -17,19 +19,11 @@ type AccessCheck =
   | { state: "approved" | "denied"; memberExists: true; memberId: string }
   | { state: "unavailable"; memberExists: boolean; reason?: string };
 
-type MemberIdentity = { memberId: string; displayName: string };
 type Screen =
   | { kind: "loading"; title: string; message: string }
   | { kind: "login"; status: string; action: "sign-in" | "sign-out"; retryVisible: boolean; statusKind?: "info" | "error" }
   | { kind: "workflow"; identity: MemberIdentity }
   | { kind: "message"; title: string; message: string; showRetry: boolean; showSignOut: boolean };
-
-const PANEL_CLASS =
-  "mx-auto flex min-h-[280px] w-full min-w-0 max-w-3xl flex-col items-start justify-center gap-4 rounded-2xl border border-[#2e394b] bg-[#0a0d13] p-4 text-[#f1f5fb] sm:p-8";
-const BUTTON_CLASS =
-  "inline-flex min-h-11 max-w-full items-center justify-center rounded-xl border border-transparent bg-[#4a8dff] px-4 py-3 text-sm font-semibold leading-5 text-white transition-colors hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8db7ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] disabled:cursor-not-allowed disabled:opacity-50";
-const SECONDARY_BUTTON_CLASS =
-  "inline-flex min-h-11 max-w-full items-center justify-center rounded-xl border border-[#44536a] bg-[#1a2230] px-4 py-3 text-sm font-semibold leading-5 text-[#f1f5fb] transition-colors hover:bg-[#202a3a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8db7ff] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0d13] disabled:cursor-not-allowed disabled:opacity-50";
 
 async function checkAccess(): Promise<AccessCheck> {
   let member: Awaited<ReturnType<typeof currentMember.getMember>>;
@@ -100,24 +94,6 @@ async function getMemberDisplayName(): Promise<string> {
     // The verified member ID still identifies the session.
     return "Wix member";
   }
-}
-
-function AccessPanel({
-  title,
-  message,
-  children,
-}: {
-  title: string;
-  message: string;
-  children?: ReactNode;
-}) {
-  return (
-    <section className={PANEL_CLASS}>
-      <h2 className="m-0 break-words text-2xl font-bold leading-tight tracking-tight text-[#f1f5fb] sm:text-3xl">{title}</h2>
-      <p role="status" aria-live="polite" className="m-0 break-words text-sm leading-6 text-[#a5b1c2]">{message}</p>
-      {children ? <div className="flex w-full flex-wrap gap-3">{children}</div> : null}
-    </section>
-  );
 }
 
 function MemberLoginApp() {
@@ -350,7 +326,7 @@ function MemberLoginApp() {
   );
 }
 
-class MemberLoginTest extends HTMLElement {
+class MemberLogin extends HTMLElement {
   private reactRoot: Root | null = null;
 
   connectedCallback() {
@@ -369,4 +345,4 @@ class MemberLoginTest extends HTMLElement {
   }
 }
 
-export default MemberLoginTest;
+export default MemberLogin;

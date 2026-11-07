@@ -5,7 +5,7 @@ import { articleBodyToDocument, articleDocumentToPlainText } from "../../../../.
 import ArticleEditor from "./ArticleEditor";
 import ArticlePreview from "./ArticlePreview";
 import { EditorIcon } from "./EditorIcon";
-import type { MemberIdentity, ReviewData } from "./types";
+import type { MemberIdentity, ReviewData } from "../types";
 
 const API_BASE_URL = new URL(import.meta.url).origin;
 const CONTROL = "mt-1 min-h-10 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--focus)]";

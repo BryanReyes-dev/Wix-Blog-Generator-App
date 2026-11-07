@@ -1,25 +1,25 @@
-## CLI Commands
+# Repository agent entry point
 
-All CLI instructions can be found at:
-node_modules\@wix\cli\agents\instructions.md
+This file is the root instruction entry point for coding agents. Wix CLI-specific instructions are available at:
 
-## Skills
+`node_modules/@wix/cli/agents/instructions.md`
 
-This project comes with a set of skills that can be used when the user asks for help with specific tasks.
-If you're using the instructions provided by a skill and fail, or if you do not find a relevant skill for the task,
-you can try updating the skills by running the following command:
+Run `wix skills update` when the installed Wix skills need refreshing.
 
-`wix skills update`
+## Before substantial changes
 
-This will update the skills to the latest version.
-## AI-assisted development workflow
+Read these project documents in order:
 
-Before substantial work, read [`agent-files/AGENTS.md`](agent-files/AGENTS.md), [`agent-files/Agents_Context.md`](agent-files/Agents_Context.md), [`agent-files/ARCHITECTURE.md`](agent-files/ARCHITECTURE.md), and [`agent-files/AI-WORKFLOW.md`](agent-files/AI-WORKFLOW.md). Use the first three to understand the repository's agent rules, current context, and architecture; use AI-WORKFLOW.md for the implementation procedure.
+1. [Agent instructions and documentation map](agents-files/AGENTS.md)
+2. [Current implementation context](agents-files/CONTEXT.md)
+3. [Architecture and security boundaries](agents-files/ARCHITECTURE.md)
+4. [AI-assisted development workflow](agents-files/AI-WORKFLOW.md)
+5. The focused [authentication sign-off](agents-files/ADMIN-AUTH-FLOW.md) or [Wix permissions guide](agents-files/WIX-PERMISSIONS.md) when the work touches those areas.
 
-- Inspect the current branch, working tree, relevant implementation, and project instructions before proposing edits. Preserve unrelated local changes.
-- Work in small, testable slices with explicit acceptance criteria. Prefer extending existing code over replacing it wholesale.
-- Use the installed Wix CLI and official Wix SDK documentation for supported extension scaffolding and APIs. Do not invent SDK methods or manually recreate Wix-generated boilerplate when the CLI can generate it.
-- Explain changed files and meaningful trade-offs in plain language. Treat generated code as a draft that must be reviewed and tested.
-- Report only checks actually run and their real results. Clearly label manual checks, Wix-environment checks, and unverified behavior.
-- Do not expose secrets, print environment-variable values, or place credentials in source control.
-- Do not commit, push, merge, release, or switch branches unless the user explicitly directs that action.
+Inspect the actual branch, working tree, source, package scripts, tests, and installed Wix SDK references before editing. Keep client components focused on UI and React state; keep Wix API calls, authorization, validation, and sensitive operations in the server layer.
+
+Work in small, testable slices. Preserve unrelated local changes. Verify SDK contracts and permission scopes against current Wix documentation rather than assuming them. Report only checks actually run, and distinguish automated results from manual development-site verification.
+
+Do not expose secrets, tokens, private article data, or raw uploaded files. Do not commit, push, merge, release, or switch branches unless the user explicitly asks.
+
+The human-facing project overview and local setup are in [README.md](README.md). The documentation index is [agents-files/README.md](agents-files/README.md).
