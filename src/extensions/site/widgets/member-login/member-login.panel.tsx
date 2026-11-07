@@ -12,8 +12,7 @@ const MemberLoginTestPanel: FC = () => {
       <SidePanel width="300" height="100vh">
         <SidePanel.Content>
           <Text>
-            Test widget for Wix site-member authentication. The live site
-            opens Wix's native member login flow.
+            Provides Wix site-member sign-in and routes approved members to the blog workflow.
           </Text>
         </SidePanel.Content>
       </SidePanel>

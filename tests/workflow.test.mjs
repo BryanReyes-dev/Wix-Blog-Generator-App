@@ -18,6 +18,7 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { articleBodyToDocument, articleDocumentToPlainText, articleDocumentToRichContent, parseArticleDocument } from '../src/lib/article-document.ts';
 import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
 import { MAX_MEDIA_FRAMES, parseMediaReferences } from '../src/lib/server/media-references.ts';
 import {
@@ -192,32 +193,34 @@ test('same member submission ID shares an in-flight or successful draft result',
   assert.equal(calls, 2);
 });
 
-test('Wix AI generation uses the managed provider and parses the article JSON', async () => {
+test('Wix AI generation uses the managed provider and requests a structured article object', async () => {
   let callArgs = null;
   const result = await generateBlogArticle(
     { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [] },
     {
       model: 'gpt-5-mini',
-      generateText: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { text: JSON.stringify(validArticle()) };
+        return { output: validArticle() };
       },
     },
   );
 
   assert.equal(typeof callArgs.system, 'string');
-  assert.match(callArgs.system, /valid JSON/);
+  assert.match(callArgs.system, /structured article object/);
   assert.match(callArgs.system, /no more than 5 strings/);
   assert.match(callArgs.system, /title 1-200 characters/);
   assert.match(callArgs.system, /under 30000 characters/);
+  assert.equal(callArgs.schema.safeParse(validArticle()).success, true);
+  assert.equal(callArgs.schema.safeParse({ ...validArticle(), unexpected: true }).success, false);
   assert.equal(callArgs.prompt, JSON.stringify({
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
   }));
-  assert.equal(callArgs.maxOutputTokens, 3500);
+  assert.equal(callArgs.maxOutputTokens, 6000);
   assert.deepEqual(result, validArticle());
 });
 
-test('Wix AI generation rejects empty model configuration and malformed output', async () => {
+test('Wix AI generation rejects empty model configuration and invalid article objects', async () => {
   const brief = {
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
   };
@@ -230,9 +233,40 @@ test('Wix AI generation rejects empty model configuration and malformed output',
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateText: async () => ({ text: 'not JSON' }),
+      generateStructuredOutput: async () => ({ output: { ...validArticle(), sections: [] } }),
     }),
-    (error) => error instanceof AiProviderError && error.status === 502,
+    (error) => error instanceof AiProviderError && error.status === 502 && /required format/i.test(error.message),
+  );
+
+  await assert.rejects(
+    generateBlogArticle(brief, {
+      model: 'gpt-5-mini',
+      generateStructuredOutput: async () => {
+        const error = new Error('No structured output generated');
+        error.name = 'NoObjectGeneratedError';
+        throw error;
+      },
+    }),
+    (error) => error instanceof AiProviderError && error.status === 502 && /required format/i.test(error.message),
+  );
+});
+
+test('Wix AI response-limit failures return actionable feedback', async () => {
+  const brief = {
+    topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
+  };
+
+  await assert.rejects(
+    generateBlogArticle(brief, {
+      model: 'gpt-5-mini',
+      generateStructuredOutput: async () => {
+        const error = new Error('No structured output generated');
+        error.name = 'NoObjectGeneratedError';
+        error.finishReason = 'length';
+        throw error;
+      },
+    }),
+    (error) => error instanceof AiProviderError && error.status === 502 && /response limit/i.test(error.message),
   );
 });
 
@@ -244,7 +278,7 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateText: async () => { const error = new Error('timeout'); error.name = 'TimeoutError'; throw error; },
+      generateStructuredOutput: async () => { const error = new Error('timeout'); error.name = 'TimeoutError'; throw error; },
     }),
     (error) => error instanceof AiProviderError && error.status === 504,
   );
@@ -252,12 +286,11 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
   await assert.rejects(
     generateBlogArticle(brief, {
       model: 'gpt-5-mini',
-      generateText: async () => { throw new Error('permission denied'); },
+      generateStructuredOutput: async () => { throw new Error('permission denied'); },
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
 });
-
 
 const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
 const sourceRecord = (id = 'S1') => ({
@@ -404,9 +437,9 @@ test('Wix AI receives research excerpts and per-link focus notes when sources ar
     {
       model: 'gpt-5-mini',
       researchSources: sources,
-      generateText: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { text: JSON.stringify(article) };
+        return { output: article };
       },
     },
   );
@@ -564,9 +597,9 @@ test('Wix AI generation forwards visual references to the generator adapter', as
     {
       model: 'gpt-5-mini',
       mediaReferences,
-      generateText: async (args) => {
+      generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { text: JSON.stringify(validArticle()) };
+        return { output: validArticle() };
       },
     },
   );
@@ -602,4 +635,97 @@ test('custom development origins must be explicitly configured as exact HTTPS or
   assert.equal(isAllowedDevCorsOrigin('https://another-domain.example', customOrigin), false);
   assert.throws(() => getAllowedDevCorsOrigins('https://my-domain.example/path'), /exact HTTPS origins/);
   assert.throws(() => getAllowedDevCorsOrigins('http://my-domain.example'), /exact HTTPS origins/);
+});
+
+test('structured article documents preserve block order, formatting, and Ricos styling', () => {
+  let sequence = 0;
+  const document = articleBodyToDocument(
+    '## Editorial section\n\nA **bold** paragraph with an inline *emphasis*.\n\n- First point\n- Second point\n\n> A pull quote.',
+    () => 'block-' + (++sequence),
+  );
+  const parsed = parseArticleDocument(document);
+  const richContent = articleDocumentToRichContent(parsed);
+  assert.equal(richContent.nodes[0]?.type, 'HEADING');
+  assert.equal(richContent.nodes[1]?.type, 'PARAGRAPH');
+  assert.equal(richContent.nodes.some((node) => node.type === 'BULLETED_LIST'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'BLOCKQUOTE'), true);
+  assert.match(articleDocumentToPlainText(parsed), /## Editorial section/);
+  const paragraph = richContent.nodes.find((node) => node.type === 'PARAGRAPH');
+  assert.equal(paragraph?.paragraphData?.textStyle?.fontSize?.value, 17);
+});
+
+test('structured article documents preserve original GIF media and image layout settings', () => {
+  const document = {
+    appearance: {
+      bodyFontFamily: 'Georgia', headingFontFamily: 'Arial', bodyFontSize: 18,
+      headingFontSize: 32, bodyColor: '#344054', headingColor: '#172033',
+      canvasColor: '#F8FAFC', lineHeight: 1.8, textAlignment: 'LEFT',
+    },
+    blocks: [{
+      id: 'gif-1', type: 'image',
+      media: {
+        id: 'wix-media-id',
+        url: 'https://static.wixstatic.com/media/example~mv2.gif',
+        name: 'animated.gif', mimeType: 'image/gif',
+        uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+        width: 800, height: 450,
+      },
+      altText: 'Animated clothing detail', caption: 'The original animated GIF',
+      alignment: 'LEFT', width: 'SMALL', textWrap: true,
+      borderWidth: 2, borderColor: '#AABBCC', borderRadius: 8,
+    }],
+  };
+  const richContent = articleDocumentToRichContent(document);
+  const imageNode = richContent.nodes[0];
+  assert.equal(imageNode?.type, 'IMAGE');
+  assert.equal(imageNode?.imageData?.image?.src?.id, 'wix-media-id');
+  assert.equal(imageNode?.imageData?.containerData?.textWrap, true);
+  assert.equal(imageNode?.imageData?.containerData?.width?.size, 'SMALL');
+  assert.equal(imageNode?.imageData?.styles?.border?.radius, 8);
+  assert.equal(imageNode?.imageData?.altText, 'Animated clothing detail');
+});
+
+test('structured article documents reject invalid media, arbitrary URLs, and missing alt text', () => {
+  const base = {
+    appearance: {},
+    blocks: [{
+      id: 'image-1', type: 'image',
+      media: {
+        id: 'id', url: 'https://example.com/image.jpg', name: 'image.jpg',
+        mimeType: 'image/jpeg', uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+        width: 800, height: 600,
+      },
+      altText: 'Image', caption: '', alignment: 'CENTER', width: 'CONTENT',
+      textWrap: false, borderWidth: 0, borderColor: '#D0D5DD', borderRadius: 0,
+    }],
+  };
+  assert.throws(() => parseArticleDocument(base), /Wix Media Manager/);
+  assert.throws(() => parseArticleDocument({
+    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg', uploadToken: 'invalid' } }],
+  }), /verified editor upload/);
+  assert.throws(() => parseArticleDocument({
+    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg' }, altText: '' }],
+  }), /alternative text/);
+  assert.throws(() => parseArticleDocument({
+    appearance: { bodyFontSize: 200 },
+    blocks: [{ id: 'p1', type: 'paragraph', text: 'Text', style: {} }],
+  }), /Body font size/);
+});
+
+test('draft submission parser validates SEO slug, tags, and featured status', () => {
+  const parsed = parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title, body: 'Article body.',
+    metaDescription: validArticle().metaDescription, seoKeywords: [],
+    seoSlug: 'a-practical-guide', hashtags: ['style', 'fashion'], featured: true,
+  });
+  assert.equal(parsed.seoSlug, 'a-practical-guide');
+  assert.deepEqual(parsed.hashtags, ['style', 'fashion']);
+  assert.equal(parsed.featured, true);
+  assert.throws(() => parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title, body: 'Article body.',
+    metaDescription: validArticle().metaDescription, seoKeywords: [],
+    seoSlug: '../unsafe',
+  }), /SEO URL slug/);
 });

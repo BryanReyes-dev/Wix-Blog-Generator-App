@@ -99,7 +99,10 @@ test("the all suite runs runner, auth, and workflow tests in order", async () =>
       },
     ],
   );
-  assert.ok(calls.every((call) => call.options.shell === true));
+  assert.deepEqual(
+  calls.map((call) => call.options.shell),
+  [false, true, false],
+);
   assert.ok(calls.every((call) => call.options.stdio === "inherit"));
 });
 

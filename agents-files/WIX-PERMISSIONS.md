@@ -9,6 +9,8 @@ Request only the scopes needed by the current implementation:
 | Scope | Purpose |
 | --- | --- |
 | `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create a Wix Blog draft. The request explicitly sends `publish: false`. |
+| `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` — Manage Media Manager | Generate signed upload URLs and upload original article images and GIFs. |
+| `SCOPE.DC-MEDIA.READ-MEDIAMANAGER` — Read Media Manager | Verify media descriptors, upload ownership, public state, and processing readiness. |
 | `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — Invoke AI Models | Generate article content through the Wix-managed `@wix/ai` integration. |
 | `SCOPE.DC.MANAGE-YOUR-APP` — Manage Your App | Call `appInstances.getAppInstance()` as the app and verify Wix Blog's installed app ID. |
 | `SCOPE.DC-MEMBERS.READ-MEMBERS` — Read Members | Read the live member directory for the dashboard. Calls are made without elevation, so Wix also evaluates the dashboard user's role. |
@@ -31,6 +33,8 @@ The creation path uses `draftPosts.createDraftPost()` from `@wix/blog`, sends th
 `WorkflowAccess` remains app-owned and site-specific. Its `itemRead`, `itemInsert`, `itemUpdate`, and `itemRemove` access levels are all `PRIVILEGED`, so a site member or ordinary CMS editor cannot grant themselves access through a direct collection call.
 
 Member workflow endpoints require an active `MEMBER` token and a successful approval lookup for the member ID from that token. A missing record denies access; an approval-service error returns a blocked response. Dashboard administration requires an active `USER` token and a successful non-elevated read against the `PRIVILEGED` collection. The member directory, credit balance, and approval mutation SDK calls are not elevated, so Wix's user role and the app's granted scopes both remain in force.
+
+Original image insertion uses the `@wix/media` `files.generateFileUploadUrl()` and `files.getFileDescriptor()` methods. Uploads are limited to JPEG, PNG, WebP, and GIF images of 10 MB or less. Assets are uploaded as public Media Manager files. The server revalidates the upload token, file ID, public flag, URL, and `READY` processing status during draft creation.
 
 On an already-installed app, changes to a data collection extension or new app scopes require the appropriate Wix app version/update and site approval before they work on the development site. This code change does not release the app or alter site settings.
 

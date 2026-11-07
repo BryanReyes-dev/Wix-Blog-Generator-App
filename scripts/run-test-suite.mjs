@@ -79,7 +79,7 @@ export async function runTestSuite(
         child = spawnCommand(command, args, {
           env,
           stdio: "inherit",
-          shell: platform === "win32",
+          shell: platform === "win32" && command === "vp",
         });
       } catch (error) {
         writeErr(
