@@ -2,6 +2,17 @@
 
 This Wix CLI/Astro app gives approved site members a basic workflow for generating, reviewing, editing, and explicitly saving unpublished Wix Blog drafts. Wix site-member authentication is reused. The server checks each member's approval before generation or draft creation, validates generated article data, and checks Wix Blog installation before saving a draft.
 
+## Source structure
+
+- `src/components/` contains the React UI, organized by purpose (`blog`, `dashboard`, `member`, and shared `ui`).
+- `src/extensions/` contains Wix extension builder definitions, the site-widget custom-element adapter, and the Wix data-collection schema.
+- `src/lib/hooks/` contains descriptive React hooks for client-side Wix member access and blog-workflow state/API interactions.
+- `src/lib/server/` contains server-only Wix integration, authorization, AI generation, and draft-submission logic.
+- `src/lib/blog-content.ts` contains reusable blog types, validation, and content conversion shared by the browser workflow and server routes.
+- `src/pages/` keeps Astro file-based routing and the HTTP API endpoints.
+
+React components are kept out of Wix registration files. The site widget's custom-element adapter mounts the shared React UI, while the dashboard page uses the same component-first source organization. CSS Modules live beside the components they style.
+
 ## Basic member workflow
 
 1. A member signs in through Wix at `/admin`.

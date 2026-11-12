@@ -4,7 +4,7 @@ import {
   jsonResponse,
   requireApprovedSiteMember,
 } from '../../../lib/server/access-control';
-import { InputValidationError, parseBlogBrief, parseGeneratedArticle } from '../../../lib/server/blog-content';
+import { InputValidationError, parseBlogBrief, parseGeneratedArticle } from '../../../lib/blog-content';
 import { AiProviderError, generateBlogArticle } from '../../../lib/server/generate-blog-article';
 
 type ServerEnvironment = ImportMetaEnv & {

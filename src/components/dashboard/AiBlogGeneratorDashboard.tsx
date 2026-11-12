@@ -2,7 +2,7 @@ import { useEffect, useState, type FC, type FormEvent } from 'react';
 import { httpClient } from '@wix/essentials';
 import { Page, WixDesignSystemProvider } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
-import styles from './ai-blog-generator.module.css';
+import styles from './AiBlogGeneratorDashboard.module.css';
 
 const APP_ID = '012509d2-64ed-4670-bc27-8299e942673f';
 const APP_INSTALLER_URL = `https://wix.com/app-installer?appId=${APP_ID}`;

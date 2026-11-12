@@ -1,0 +1,46 @@
+.panel {
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 22px;
+  border: 1px solid #d9dfe9;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #172033;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.message {
+  margin: 0;
+  color: #5c6472;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.error {
+  border-color: #efc4c4;
+  background: #fff8f8;
+}
+
+.success {
+  border-color: #b8dfc9;
+  background: #f5fbf7;
+}
+
+.info {
+  border-color: #d9dfe9;
+  background: #ffffff;
+}

@@ -1,0 +1,118 @@
+.root {
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  max-width: 1000px;
+  min-height: 100%;
+  gap: 20px;
+  align-content: start;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid #d9dfe9;
+  border-radius: 16px;
+  background: #f8fafc;
+  color: #172033;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.workflowTopBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.workflowIntro {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: #5c6472;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.workflowForm {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.workflowInput,
+.workflowTextarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #cdd4df;
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  font-size: 14px;
+}
+
+.workflowInput:focus,
+.workflowTextarea:focus {
+  border-color: #2368d1;
+  outline: 3px solid rgb(35 104 209 / 16%);
+}
+
+.workflowTextarea {
+  min-height: 120px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.reviewSection {
+  display: grid;
+  gap: 16px;
+}
+
+.workflowSectionTitle {
+  margin: 0;
+  color: #172033;
+  font-size: 19px;
+}
+
+.metadataCard {
+  padding: 16px 20px;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #30394a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.metadataCard p {
+  margin: 8px 0 0;
+}
+
+.keywordList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.keywordList li {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #edf3ff;
+  color: #284e89;
+}
+
+@media (max-width: 620px) {
+  .root { padding: 18px; }
+  .workflowTopBar { flex-direction: column; }
+  .workflowForm { padding: 16px; }
+}

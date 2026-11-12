@@ -4,7 +4,7 @@ import { draftPosts } from '@wix/blog';
 import { auth } from '@wix/essentials';
 import { handleApiError, jsonResponse, requireApprovedSiteMember } from '../../../lib/server/access-control';
 import { ApiError } from '../../../lib/server/authorization-core';
-import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/server/blog-content';
+import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/blog-content';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
 

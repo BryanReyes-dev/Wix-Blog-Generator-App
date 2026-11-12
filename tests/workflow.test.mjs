@@ -14,7 +14,7 @@ import {
   parseBlogBrief,
   parseDraftSubmission,
   parseGeneratedArticle,
-} from '../src/lib/server/blog-content.ts';
+} from '../src/lib/blog-content.ts';
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
