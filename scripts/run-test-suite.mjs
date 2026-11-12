@@ -76,10 +76,14 @@ export async function runTestSuite(
 
       let child;
       try {
+        // Node is an executable and should be spawned directly. On Windows,
+        // only "vp" needs a shell because its package-manager command is a
+        // .cmd shim that cmd.exe must resolve.
+        const useWindowsShell = platform === "win32" && command === "vp";
         child = spawnCommand(command, args, {
           env,
           stdio: "inherit",
-          shell: platform === "win32",
+          shell: useWindowsShell,
         });
       } catch (error) {
         writeErr(
