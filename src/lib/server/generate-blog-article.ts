@@ -1,6 +1,6 @@
 import { generateText } from 'ai';
 import { openai } from '@wix/ai';
-import type { BlogBrief } from './blog-content';
+import type { BlogBrief } from '../blog-content';
 
 export class AiProviderError extends Error {
   public readonly status: number;
