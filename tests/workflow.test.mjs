@@ -208,6 +208,33 @@ test('Wix AI generation uses the managed provider and parses the article JSON', 
   assert.deepEqual(result, validArticle());
 });
 
+test('Wix AI structured-output schema requires mediaPlacements even when no media is attached', async () => {
+  const brief = {
+    topic: 'small-apartment houseplants',
+    audience: 'first-time plant owners',
+    tone: 'friendly and practical',
+    instructions: 'Explain easy plant care for small homes.',
+    seoKeywords: ['low-maintenance houseplants'],
+  };
+  let capturedSchema;
+  let capturedSystem = '';
+
+  const result = await generateBlogArticle(brief, {
+    model: 'gpt-5-mini',
+    generateStructuredOutput: async ({ schema, system }) => {
+      capturedSchema = schema;
+      capturedSystem = system;
+      return { output: { ...validArticle(), mediaPlacements: [] } };
+    },
+  });
+
+  assert.ok(capturedSchema);
+  assert.equal(capturedSchema.safeParse(validArticle()).success, false);
+  assert.equal(capturedSchema.safeParse({ ...validArticle(), mediaPlacements: [] }).success, true);
+  assert.match(capturedSystem, /Always include mediaPlacements as an array/);
+  assert.deepEqual(result, validArticle());
+});
+
 test('Wix AI generation rejects empty model configuration and malformed output', async () => {
   const brief = {
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],

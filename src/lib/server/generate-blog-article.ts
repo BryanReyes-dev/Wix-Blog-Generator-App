@@ -40,7 +40,7 @@ const articleOutputSchema = z.object({
     afterParagraph: z.number().int().min(0).max(20),
     caption: z.string().max(500),
     altText: z.string().max(500),
-  }).strict()).max(4).optional(),
+  }).strict()).max(4),
 }).strict();
 
 export type ArticleGeneratorConfig = {
@@ -116,7 +116,7 @@ export async function generateBlogArticle(
 
   const system = [
     'Write a useful, original blog article from the supplied brief.',
-    'Generate one valid JSON object representing a structured article with the exact fields title, introduction, sections, conclusion, metaDescription, and seoKeywords. When media references are supplied, also include a mediaPlacements array with one placement for every reference.',
+    'Generate one valid JSON object representing a structured article with the exact fields title, introduction, sections, conclusion, metaDescription, seoKeywords, and mediaPlacements. Always include mediaPlacements as an array; use an empty array when no original media references are supplied. When media references are supplied, include exactly one placement for every reference.',
     'The sections field must contain 2-8 section objects, each with heading and body string fields.',
     'Hard validation limits: title 1-200 characters; introduction 1-5000 characters; each section heading 1-120 characters; each section body 1-5000 characters; conclusion 1-4000 characters; metaDescription 1-500 characters; seoKeywords must contain no more than 5 strings, each 1-80 characters.',
     'Keep the complete article body (introduction, section headings and bodies, and conclusion) under 30000 characters.',
