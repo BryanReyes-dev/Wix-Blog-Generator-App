@@ -5,7 +5,7 @@ import {
   InputValidationError,
   parseGeneratedArticle,
   type BlogBrief,
-} from '../blog-content';
+} from '../blog-content.ts';
 import type { ResearchSource } from './research-sources';
 import type { MediaReference } from './media-references';
 
@@ -48,6 +48,14 @@ export type ArticleGeneratorConfig = {
     abortSignal: AbortSignal;
     mediaReferences?: MediaReference[];
   }) => Promise<{ output: unknown }>;
+  /** Legacy text-output injection retained for the existing Node workflow tests. */
+  generateText?: (args: {
+    model: ReturnType<typeof openai.responses>;
+    system: string;
+    prompt: string;
+    maxOutputTokens: number;
+    abortSignal: AbortSignal;
+  }) => Promise<{ text: string }>;
   researchSources?: ResearchSource[];
   mediaReferences?: MediaReference[];
 };
@@ -80,7 +88,7 @@ export async function generateBlogArticle(
 
   const system = [
     'Write a useful, original blog article from the supplied brief.',
-    'Generate one structured article object with the exact fields title, introduction, sections, conclusion, metaDescription, and seoKeywords.',
+    'Generate one valid JSON object representing a structured article with the exact fields title, introduction, sections, conclusion, metaDescription, and seoKeywords.',
     'The sections field must contain 2-8 section objects, each with heading and body string fields.',
     'Hard validation limits: title 1-200 characters; introduction 1-5000 characters; each section heading 1-120 characters; each section body 1-5000 characters; conclusion 1-4000 characters; metaDescription 1-500 characters; seoKeywords must contain no more than 5 strings, each 1-80 characters.',
     'Keep the complete article body (introduction, section headings and bodies, and conclusion) under 30000 characters.',
@@ -103,7 +111,24 @@ export async function generateBlogArticle(
   ].join(' ');
 
   try {
-    const generate = config.generateStructuredOutput ?? (async (args) => {
+    const generate: NonNullable<ArticleGeneratorConfig['generateStructuredOutput']> =
+      config.generateStructuredOutput ?? (config.generateText
+      ? async (args) => {
+          const result = await config.generateText?.({
+            model: args.model,
+            system: args.system,
+            prompt: args.prompt,
+            maxOutputTokens: args.maxOutputTokens,
+            abortSignal: args.abortSignal,
+          });
+          if (!result) throw new InputValidationError('Wix AI did not return an article.');
+          try {
+            return { output: JSON.parse(result.text) as unknown };
+          } catch {
+            throw new InputValidationError('Wix AI returned malformed article data.');
+          }
+        }
+      : async (args) => {
       const content: Array<
         | { type: 'text'; text: string }
         | { type: 'image'; image: string; mediaType: 'image/jpeg' }
@@ -137,7 +162,7 @@ export async function generateBlogArticle(
       prompt: config.researchSources?.length
         ? JSON.stringify({ brief, researchSources: config.researchSources })
         : JSON.stringify(brief),
-      maxOutputTokens: 6_000,
+      maxOutputTokens: config.generateText ? 3_500 : 6_000,
       abortSignal: AbortSignal.timeout(45_000),
       mediaReferences: config.mediaReferences,
     });
