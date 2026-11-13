@@ -7,6 +7,7 @@ import { ApiError } from '../../../lib/server/authorization-core';
 import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/blog-content';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
+import { parseResearchCitationSources, ResearchSourceError } from '../../../lib/server/research-sources';
 
 async function verifyWixBlogInstalled(): Promise<void> {
   let appInstance;
@@ -76,7 +77,15 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const submission = parseDraftSubmission(body);
-    const richContent = bodyToRichContent(submission.body);
+    const citationSources = parseResearchCitationSources(
+      body && typeof body === 'object' ? (body as Record<string, unknown>).researchSources : undefined,
+    );
+    const sourcesSection = citationSources.length
+      ? '\n\n## Sources\n\n' + citationSources
+          .map((source) => '- [' + source.id + '] ' + source.title.replace(/[\r\n]+/g, ' ') + ' — ' + source.url)
+          .join('\n')
+      : '';
+    const richContent = bodyToRichContent(submission.body + sourcesSection, citationSources);
 
     await verifyWixBlogInstalled();
 
@@ -169,6 +178,9 @@ export const POST: APIRoute = async ({ request }) => {
 
     return jsonResponse({ draft: result });
   } catch (error) {
+    if (error instanceof ResearchSourceError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
     if (error instanceof InputValidationError) {
       return jsonResponse({ error: error.message }, 400);
     }

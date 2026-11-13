@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useBlogWorkflow } from '../../lib/hooks/useBlogWorkflow';
+import { useBlogWorkflow, type BlogBriefInput } from '../../lib/hooks/useBlogWorkflow';
+import { useVisualReferences } from '../../lib/hooks/useVisualReferences';
 import { ActionButton } from '../ui/ActionButton';
 import { StatusPanel } from '../ui/StatusPanel';
 import { ArticleReviewEditor } from './ArticleReviewEditor';
@@ -14,6 +15,7 @@ type BlogWorkflowProps = {
 export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
   const {
     article,
+    sources,
     notice,
     isGenerating,
     isSaving,
@@ -22,6 +24,14 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
     createDraft,
   } = useBlogWorkflow({ mode });
   const [signOutError, setSignOutError] = useState('');
+  const [mediaNotice, setMediaNotice] = useState<{
+    message: string;
+    tone: 'info' | 'error' | 'success';
+  } | null>(null);
+
+  const visualReferences = useVisualReferences((message, tone = 'info') => {
+    setMediaNotice({ message, tone });
+  });
 
   const handleSignOut = async () => {
     setSignOutError('');
@@ -32,13 +42,20 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
     }
   };
 
+  const handleGenerate = async (brief: BlogBriefInput) => {
+    setMediaNotice(null);
+    await generateArticle(brief);
+  };
+
+  const visibleNotice = mediaNotice ?? notice;
+
   return (
     <main className={styles.root}>
       <header className={styles.workflowTopBar}>
         <div>
           <h2 className={styles.title}>Create a Wix Blog draft</h2>
           <p className={styles.workflowIntro}>
-            Describe the article, review and edit the generated content, then choose when to save it as an unpublished draft.
+            Describe the article, add research and visual references, review the generated content, then save it as an unpublished draft when ready.
           </p>
         </div>
         <ActionButton variant="secondary" onClick={() => void handleSignOut()}>
@@ -49,7 +66,7 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
       {mode === 'mock' ? (
         <StatusPanel
           title="Development mock mode"
-          message="Generation and draft saving are simulated. No Wix AI request is sent and no Wix Blog draft is created."
+          message="Generation and draft saving are simulated. Live web research and image/video analysis are disabled, and no Wix Blog draft is created."
           tone="info"
         />
       ) : null}
@@ -58,15 +75,24 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
         <StatusPanel title="Sign-out failed" message={signOutError} tone="error" />
       ) : null}
 
-      {notice ? (
-        <StatusPanel title="Workflow status" message={notice.message} tone={notice.tone} />
+      {visibleNotice ? (
+        <StatusPanel title="Workflow status" message={visibleNotice.message} tone={visibleNotice.tone} />
       ) : null}
 
-      <BlogBriefForm isGenerating={isGenerating} onGenerate={generateArticle} />
+      <BlogBriefForm
+        isGenerating={isGenerating}
+        isPreparingMedia={visualReferences.isPreparingMedia}
+        mediaReferences={visualReferences.mediaReferences}
+        onAddMediaFiles={visualReferences.addFiles}
+        onMediaNoteChange={visualReferences.updateNote}
+        onRemoveMedia={visualReferences.removeReference}
+        onGenerate={handleGenerate}
+      />
 
       {article ? (
         <ArticleReviewEditor
           article={article}
+          sources={sources}
           isSaving={isSaving}
           draftSaved={draftSaved}
           onSave={createDraft}

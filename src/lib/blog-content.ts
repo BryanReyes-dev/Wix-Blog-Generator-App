@@ -41,10 +41,22 @@ export type DraftSubmission = {
   seoKeywords: string[];
 };
 
+type RichTextDecoration =
+  | {
+      type: 'LINK';
+      linkData: {
+        link: {
+          url: string;
+          target: 'BLANK';
+          rel: { noreferrer: true };
+        };
+      };
+    };
+
 type RichTextNode = {
   type: 'TEXT' | 'PARAGRAPH' | 'HEADING';
   nodes?: RichTextNode[];
-  textData?: { text: string; decorations: [] };
+  textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
   headingData?: { level: number; textStyle: { textAlignment: 'AUTO' } };
 };
@@ -166,37 +178,77 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
   };
 }
 
-function textNode(text: string): RichTextNode {
+function textNode(text: string, decorations: RichTextDecoration[] = []): RichTextNode {
   return {
     type: 'TEXT',
     nodes: [],
-    textData: { text, decorations: [] },
+    textData: { text, decorations },
   };
 }
 
-function paragraphNode(text: string): RichTextNode {
+function inlineTextNodes(text: string, sources: Array<{ id: string; url: string }>): RichTextNode[] {
+  const sourceUrls = new Map(sources.map((source) => [source.id, source.url] as const));
+  const nodes: RichTextNode[] = [];
+  const linkDecoration = (url: string): RichTextDecoration => ({
+    type: 'LINK',
+    linkData: { link: { url, target: 'BLANK', rel: { noreferrer: true } } },
+  });
+  const pattern = /\[S\d+\]|https?:\/\/[^\s<>"']+/g;
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const token = match[0];
+    const index = match.index;
+    if (index > cursor) nodes.push(textNode(text.slice(cursor, index)));
+    const citation = /^\[(S\d+)\]$/.exec(token);
+    if (citation) {
+      const url = sourceUrls.get(citation[1] ?? '');
+      nodes.push(textNode(token, url ? [linkDecoration(url)] : []));
+      cursor = index + token.length;
+      continue;
+    }
+
+    const trailing = /[),.;!?]+$/.exec(token)?.[0] ?? '';
+    const candidate = trailing ? token.slice(0, -trailing.length) : token;
+    let safeUrl = '';
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') safeUrl = parsed.href;
+    } catch {
+      safeUrl = '';
+    }
+    nodes.push(safeUrl ? textNode(candidate, [linkDecoration(safeUrl)]) : textNode(candidate));
+    if (trailing) nodes.push(textNode(trailing));
+    cursor = index + token.length;
+  }
+
+  if (cursor < text.length) nodes.push(textNode(text.slice(cursor)));
+  return nodes;
+}
+
+function paragraphNode(text: string, sources: Array<{ id: string; url: string }> = []): RichTextNode {
   return {
     type: 'PARAGRAPH',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, sources),
     paragraphData: { textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-function headingNode(text: string, level: number): RichTextNode {
+function headingNode(text: string, level: number, sources: Array<{ id: string; url: string }> = []): RichTextNode {
   return {
     type: 'HEADING',
-    nodes: [textNode(text)],
+    nodes: inlineTextNodes(text, sources),
     headingData: { level, textStyle: { textAlignment: 'AUTO' } },
   };
 }
 
-export function bodyToRichContent(body: string): WixRichContent {
+export function bodyToRichContent(body: string, sources: Array<{ id: string; url: string }> = []): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
   let paragraphLines: string[] = [];
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0) return;
-    contentBlocks.push(paragraphNode(paragraphLines.join(' ')));
+    contentBlocks.push(paragraphNode(paragraphLines.join(' '), sources));
     paragraphLines = [];
   };
 
@@ -213,7 +265,7 @@ export function bodyToRichContent(body: string): WixRichContent {
       const hashes = headingMatch[1] ?? '';
       const heading = headingMatch[2]?.trim();
       if (heading) {
-        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length)));
+        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length), sources));
       }
       continue;
     }

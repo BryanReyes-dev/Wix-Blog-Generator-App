@@ -263,3 +263,365 @@
     padding: 24px;
   }
 }
+
+/* Research, media references, and workflow guidance */
+.briefWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 2cqi, 24px);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fullWidthGroup {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sectionHeadingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sectionHint {
+  display: block;
+  max-width: 75ch;
+  margin: 6px 0 0;
+  color: #687386;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.secondaryAction,
+.removeAction {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid #cdd4df;
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #f8fafc;
+  color: #23324a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.removeAction {
+  color: #8b3030;
+  background: #fff;
+}
+
+.emptyState {
+  margin: 0;
+  border: 1px dashed #cdd4df;
+  border-radius: 10px;
+  padding: 13px;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.researchList,
+.mediaList {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.researchCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.researchFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.mediaCard {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.mediaThumbnail {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  background: #fff;
+  object-fit: cover;
+}
+
+.mediaDetails {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mediaName {
+  min-width: 0;
+  color: #263248;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mediaCard > .removeAction {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.workflowTips {
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  padding: clamp(16px, 2cqi, 22px);
+  background: #fff;
+  color: #30394a;
+}
+
+.workflowTips ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #5c6472;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editorLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 2cqi, 24px);
+  min-width: 0;
+}
+
+.previewCard {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e1e6ef;
+  padding: 12px 14px;
+  color: #263248;
+  font-size: 13px;
+}
+
+.previewHeader p {
+  margin: 4px 0 0;
+  color: #687386;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.previewHeader > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #edf3ff;
+  color: #284e89;
+  font-size: 11px;
+}
+
+.previewArticle {
+  min-height: 360px;
+  max-height: 760px;
+  overflow: auto;
+  padding: clamp(16px, 2.2cqi, 28px);
+  color: #344054;
+  overflow-wrap: anywhere;
+}
+
+.previewArticle h2 {
+  margin: 0 0 12px;
+  color: #172033;
+  font-size: clamp(22px, 2cqi, 30px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.previewDescription {
+  margin: 0 0 22px;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.previewBody {
+  min-width: 0;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.previewHeading {
+  margin: 22px 0 8px;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.previewParagraph {
+  margin: 0 0 14px;
+  white-space: pre-wrap;
+}
+
+.previewList {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.citationLink,
+.sourceList a {
+  color: #2368d1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.sourceIntro {
+  margin: 6px 0 0;
+  color: #687386;
+  font-size: 12px;
+}
+
+.sourceList {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.sourceList li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceList span {
+  display: block;
+  margin-top: 3px;
+  color: #687386;
+  font-size: 11px;
+}
+
+.sourceList p {
+  margin: 5px 0 0;
+  color: #5c6472;
+  font-size: 12px;
+}
+
+@container blog-workflow (min-width: 640px) {
+  .researchFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mediaCard {
+    grid-template-columns: 82px minmax(0, 1fr) auto;
+  }
+
+  .mediaThumbnail {
+    width: 82px;
+    height: 82px;
+  }
+
+  .mediaCard > .removeAction {
+    grid-column: auto;
+  }
+}
+
+@container blog-workflow (min-width: 1024px) {
+  .briefWorkspace {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .workflowTips {
+    position: sticky;
+    top: 16px;
+  }
+
+  .editorLayout {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .previewCard {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+@container blog-workflow (min-width: 1440px) {
+  .briefWorkspace {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  }
+
+  .editorLayout {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+
+  .researchCard,
+  .mediaCard {
+    padding: 14px;
+  }
+
+  .workflowTips {
+    padding: 24px;
+  }
+}
