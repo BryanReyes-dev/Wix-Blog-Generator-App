@@ -140,7 +140,7 @@ export function BlogBriefForm({
             className={styles.fileInput}
             type="file"
             multiple
-            accept=".jpg,.jpeg,.jpe,.jfif,.png,.gif,.bmp,.webp,.heic,.heif,.tif,.tiff,.avif,.svg,.mp4,.m4v,.mov,.webm,.avi,.mkv,.mpg,.mpeg,.ogv,.wmv,.vob,.divx,.xvid,.mp3,.wav,.m4a,.aac,.flac,.wma,.aif,.aiff,.pdf,.txt,.csv,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.7z,.rar"
+            accept=".jpg,.jpeg,.jpe,.jfif,.png,.gif,.bmp,.webp,.heic,.heif,.tif,.tiff,.avif,.svg,.mp4,.m4v,.mov,.webm,.avi,.mkv,.mpg,.mpeg,.mpe,.ogv,.wmv,.3gp,.mxf,.vob,.divx,.xvid,.mp3,.wav,.m4a,.aac,.flac,.wma,.aif,.aiff,.pdf,.txt,.csv,.rtf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.zip,.7z,.rar"
             aria-label="Choose article media files"
             onChange={handleFilesChange}
           />
