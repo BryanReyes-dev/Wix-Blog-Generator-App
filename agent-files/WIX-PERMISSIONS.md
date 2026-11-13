@@ -9,6 +9,8 @@ Request only the scopes needed by the current implementation:
 | Scope | Purpose |
 | --- | --- |
 | `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create a Wix Blog draft. The request explicitly sends `publish: false`. |
+| `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` — Manage Media Manager | Generate signed direct and resumable upload URLs so approved members can upload original article media. |
+| `SCOPE.DC-MEDIA.READ-MEDIAMANAGER` — Read Media Manager | Verify uploaded files, media types, processing state, and URLs before adding them to the Blog draft. |
 | `SCOPE.DC.MANAGE-YOUR-APP` — Manage Your App | Call `appInstances.getAppInstance()` as the app and verify Wix Blog's installed app ID. |
 | `SCOPE.DC-MEMBERS.READ-MEMBERS` — Read Members | Read the live member directory for the dashboard. Calls are made without elevation, so Wix also evaluates the dashboard user's role. |
 | `SCOPE.PROMOTE.MANAGE-SEO` — Manage SEO Settings | Keep the existing AI Credits balance inspection working. It does not generate content. |
@@ -23,7 +25,9 @@ In Wix Developer Center, add **Wix Blog** in **App Profile → App Audience → 
 
 At draft submission time, the backend calls `appInstances.getAppInstance()` and checks `site.installedWixApps` for Wix Blog app ID `14bcded7-0066-7c35-14d7-466cb3f09103`. That identifier was verified from the connected Wix site app context. If the list is missing, Blog is absent, or the `Manage Your App` call fails, the endpoint stops before `createDraftPost` and returns an actionable error.
 
-The creation path uses `draftPosts.createDraftPost()` from `@wix/blog`, sends the verified site-member ID as the required third-party `memberId`, and passes `{ publish: false }`. Only a returned `UNPUBLISHED` status is reported as success. The app has no publish call.
+Original media is uploaded to Wix Media Manager through `@wix/media`. Files up to 10 MB use a signed direct upload URL; larger files use Wix's resumable TUS upload URL. The server re-reads each uploaded descriptor, verifies its Wix media type and public URL, and waits for `operationStatus === 'READY'` before composing the draft. Upload URL generation requires Manage Media Manager; descriptor verification requires Read Media Manager.
+
+The creation path uses `draftPosts.createDraftPost()` from `@wix/blog`, sends the verified site-member ID as the required third-party `memberId`, and passes `{ publish: false }`. Original images are inserted as IMAGE blocks, videos as VIDEO blocks, audio as AUDIO blocks, and document/archive assets as downloadable links. Only a returned `UNPUBLISHED` status is reported as success. The app has no publish call.
 
 ## Approval collection and authorization
 
@@ -47,7 +51,7 @@ Store the key with `wix env set --key OPENAI_API_KEY --value <your-key>`. For lo
 Before live verification:
 
 1. Add the Wix Blog required product in Developer Center.
-2. Add the Wix permissions listed above and approve the app update on an isolated development site.
+2. Add the Wix permissions listed above, including Manage Media Manager and Read Media Manager, and approve the app update on an isolated development site.
 3. Install Wix Blog on that development site and ensure the app-owned `WorkflowAccess` collection is provisioned with `PRIVILEGED` permissions.
 4. Set `OPENAI_API_KEY` and, if desired, `OPENAI_MODEL` as server variables.
 5. Place the member widget on `/admin`, `/admin/workflow`, and `/admin/permission-denied`. On `/admin/workflow`, stretch it wide and increase its height to show the brief and review fields; existing placements may retain their previous dimensions.

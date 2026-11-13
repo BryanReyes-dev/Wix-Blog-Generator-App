@@ -36,7 +36,8 @@
     "ai": "^6.0.26",
     "astro": "^5.18.2",
     "typescript": "^5.9.3",
-    "zod": "^4.1.8"
+    "zod": "^4.1.8",
+    "@wix/media": "^1.0.277"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",

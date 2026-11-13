@@ -16,6 +16,8 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
   const {
     article,
     sources,
+    uploadedMedia,
+    removeUploadedMedia,
     notice,
     isGenerating,
     isSaving,
@@ -55,7 +57,7 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
         <div>
           <h2 className={styles.title}>Create a Wix Blog draft</h2>
           <p className={styles.workflowIntro}>
-            Describe the article, add research and visual references, review the generated content, then save it as an unpublished draft when ready.
+            Describe the article, add research and original media, review the editorial layout, then save an unpublished draft when it is ready.
           </p>
         </div>
         <ActionButton variant="secondary" onClick={() => void handleSignOut()}>
@@ -85,7 +87,10 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
         mediaReferences={visualReferences.mediaReferences}
         onAddMediaFiles={visualReferences.addFiles}
         onMediaNoteChange={visualReferences.updateNote}
-        onRemoveMedia={visualReferences.removeReference}
+        onRemoveMedia={(id) => {
+          visualReferences.removeReference(id);
+          removeUploadedMedia(id);
+        }}
         onGenerate={handleGenerate}
       />
 
@@ -93,6 +98,7 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
         <ArticleReviewEditor
           article={article}
           sources={sources}
+          media={uploadedMedia}
           isSaving={isSaving}
           draftSaved={draftSaved}
           onSave={createDraft}

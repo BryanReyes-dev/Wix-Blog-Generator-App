@@ -1,15 +1,14 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
-  MAX_IMAGE_BYTES,
   MAX_MEDIA_FILES,
   MAX_MEDIA_REFERENCE_CHARS,
-  MAX_VIDEO_BYTES,
   MAX_VISUAL_FRAMES,
-} from '../media-reference-constants';
-import { getMediaKind, imageReference, videoReferenceFrames } from '../media-reference';
-import type { MediaReference } from '../media-reference-types';
+} from "../media-reference-constants";
+import { getMediaFileMaxBytes } from "../media-file-types";
+import { getMediaKind, imageReference, videoReferenceFrames } from "../media-reference";
+import type { MediaReference } from "../media-reference-types";
 
-type ReportStatus = (message: string, tone?: 'info' | 'error' | 'success') => void;
+type ReportStatus = (message: string, tone?: "info" | "error" | "success") => void;
 
 export function useVisualReferences(reportStatus: ReportStatus) {
   const [mediaReferences, setMediaReferences] = useState<MediaReference[]>([]);
@@ -24,19 +23,19 @@ export function useVisualReferences(reportStatus: ReportStatus) {
     try {
       for (const file of files) {
         if (nextReferences.length >= MAX_MEDIA_FILES) {
-          reportStatus('Attach up to ' + MAX_MEDIA_FILES + ' reference files. Remove a file before adding another.', 'error');
+          reportStatus("Attach up to " + MAX_MEDIA_FILES + " article media files. Remove a file before adding another.", "error");
           break;
         }
 
         const kind = getMediaKind(file);
         if (!kind) {
-          reportStatus('Unsupported file type for ' + file.name + '. Use JPG, PNG, WebP, GIF, MP4, MOV, or WebM.', 'error');
+          reportStatus("Unsupported file type for " + file.name + ". Choose a Wix-supported image, video, audio, PDF, document, or archive file.", "error");
           continue;
         }
 
-        const sizeLimit = kind === 'image' ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
+        const sizeLimit = getMediaFileMaxBytes(file.name, kind);
         if (file.size <= 0 || file.size > sizeLimit) {
-          reportStatus(file.name + ' is too large. Images must be 20 MB or less; videos must be 100 MB or less.', 'error');
+          reportStatus(file.name + " exceeds the file-size limit for this media type.", "error");
           continue;
         }
 
@@ -44,40 +43,40 @@ export function useVisualReferences(reportStatus: ReportStatus) {
           (total, reference) => total + reference.frames.length,
           0,
         );
-        const remainingFrames = MAX_VISUAL_FRAMES - existingFrameCount;
-        if (remainingFrames <= 0) {
-          reportStatus('You can attach up to ' + MAX_VISUAL_FRAMES + ' visual frames. Remove a reference to make room.', 'error');
-          break;
-        }
+        const remainingFrames = Math.max(0, MAX_VISUAL_FRAMES - existingFrameCount);
+        let frames: MediaReference["frames"] = [];
 
-        try {
-          reportStatus('Preparing ' + file.name + ' for visual analysis…');
-          const frames = kind === 'image'
-            ? [await imageReference(file)]
-            : await videoReferenceFrames(file, remainingFrames);
-          const currentEncodedChars = nextReferences.reduce((total, reference) =>
-            total + reference.frames.reduce((frameTotal, frame) => frameTotal + frame.dataUrl.length, 0),
-          0);
-          const incomingEncodedChars = frames.reduce((total, frame) => total + frame.dataUrl.length, 0);
-
-          if (currentEncodedChars + incomingEncodedChars > MAX_MEDIA_REFERENCE_CHARS) {
-            reportStatus('Reference images are too large together. Remove a file or use smaller files.', 'error');
-            continue;
+        if ((kind === "image" || kind === "video") && remainingFrames > 0) {
+          try {
+            reportStatus("Preparing " + file.name + " for AI visual analysis…");
+            frames = kind === "image"
+              ? [await imageReference(file)]
+              : await videoReferenceFrames(file, remainingFrames);
+          } catch {
+            reportStatus(file.name + " will still be uploaded and added to the article, but this browser could not prepare it for AI visual analysis.", "info");
           }
-
-          nextReferences.push({
-            id: crypto.randomUUID(),
-            name: file.name.slice(0, 160),
-            kind,
-            notes: '',
-            frames,
-            originalBytes: file.size,
-          });
-          setMediaReferences([...nextReferences]);
-          reportStatus('Attached ' + file.name + ' as a visual reference.', 'success');
-        } catch (error) {
-          reportStatus(error instanceof Error ? error.message : 'Could not read ' + file.name + '.', 'error');
         }
+
+        const currentEncodedChars = nextReferences.reduce((total, reference) =>
+          total + reference.frames.reduce((frameTotal, frame) => frameTotal + frame.dataUrl.length, 0), 0);
+        const incomingEncodedChars = frames.reduce((total, frame) => total + frame.dataUrl.length, 0);
+
+        if (currentEncodedChars + incomingEncodedChars > MAX_MEDIA_REFERENCE_CHARS) {
+          reportStatus("AI preview images are too large together. This file can still be uploaded, but its frames will not be sent for analysis.", "info");
+          frames = [];
+        }
+
+        nextReferences.push({
+          id: crypto.randomUUID(),
+          name: file.name.slice(0, 160),
+          kind,
+          notes: "",
+          frames,
+          originalBytes: file.size,
+          file,
+        });
+        setMediaReferences([...nextReferences]);
+        reportStatus("Added " + file.name + ". The original file will be uploaded to Wix when you generate the article.", "success");
       }
     } finally {
       setIsPreparingMedia(false);

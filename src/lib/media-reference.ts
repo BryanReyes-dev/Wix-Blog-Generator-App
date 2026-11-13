@@ -1,9 +1,6 @@
-import {
-  ACCEPTED_IMAGE_TYPES,
-  ACCEPTED_VIDEO_TYPES,
-  MAX_SINGLE_FRAME_CHARS,
-} from './media-reference-constants';
-import type { MediaFrame } from './media-reference-types';
+import { MAX_SINGLE_FRAME_CHARS } from "./media-reference-constants";
+import { getMediaFileInfo } from "./media-file-types";
+import type { MediaFrame, MediaKind } from "./media-reference-types";
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + " KB";
@@ -57,11 +54,13 @@ function canvasJpeg(source: CanvasImageSource, width: number, height: number, la
 
     for (const quality of qualities) {
       const dataUrl = canvas.toDataURL("image/jpeg", quality);
-      if (dataUrl.length <= MAX_SINGLE_FRAME_CHARS) return { label, dataUrl };
+      if (dataUrl.length <= MAX_SINGLE_FRAME_CHARS) {
+        return { label, dataUrl, width, height };
+      }
     }
   }
 
-  throw new Error("This image is too detailed to attach. Try a smaller image.");
+  throw new Error("This image is too detailed to attach for AI analysis.");
 }
 
 export async function imageReference(file: File): Promise<MediaFrame> {
@@ -92,7 +91,7 @@ export async function videoReferenceFrames(file: File, maxFrames: number): Promi
     await metadataLoaded;
 
     if (!Number.isFinite(video.duration) || video.duration <= 0 || !video.videoWidth || !video.videoHeight) {
-      throw new Error("This video has no readable visual frames.");
+      throw new Error("This video has no readable visual frames in your browser.");
     }
 
     const positions = [0.18, 0.5, 0.82].slice(0, Math.max(1, Math.min(3, maxFrames)));
@@ -100,16 +99,17 @@ export async function videoReferenceFrames(file: File, maxFrames: number): Promi
 
     for (const position of positions) {
       const time = Math.max(0, Math.min(video.duration - 0.08, video.duration * position));
-
       if (Math.abs(video.currentTime - time) > 0.02) {
         const seeked = waitForEvent(video, "seeked", "error");
         video.currentTime = time;
         await seeked;
       }
 
-      frames.push(canvasJpeg(video, video.videoWidth, video.videoHeight, "Frame at " + Math.round(position * 100) + "%"));
+      frames.push({
+        ...canvasJpeg(video, video.videoWidth, video.videoHeight, "Frame at " + Math.round(position * 100) + "%"),
+        durationSeconds: video.duration,
+      });
     }
-
     return frames;
   } finally {
     video.pause();
@@ -119,17 +119,6 @@ export async function videoReferenceFrames(file: File, maxFrames: number): Promi
   }
 }
 
-export function getMediaKind(file: File): "image" | "video" | null {
-  const extension = file.name.toLowerCase().split(".").pop() ?? "";
-  const mimeType = file.type.toLowerCase();
-
-  if (ACCEPTED_IMAGE_TYPES.has(mimeType) || ["jpg", "jpeg", "png", "webp", "gif"].includes(extension)) {
-    return "image";
-  }
-
-  if (ACCEPTED_VIDEO_TYPES.has(mimeType) || ["mp4", "webm", "mov"].includes(extension)) {
-    return "video";
-  }
-
-  return null;
+export function getMediaKind(file: File): MediaKind | null {
+  return getMediaFileInfo(file.name)?.kind ?? null;
 }

@@ -51,7 +51,7 @@ export const POST: APIRoute = async ({ request }) => {
 
     let article;
     try {
-      article = parseGeneratedArticle(generated);
+      article = parseGeneratedArticle(generated, mediaReferences);
       assertCitationIntegrity(article, researchSources);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown validation error';

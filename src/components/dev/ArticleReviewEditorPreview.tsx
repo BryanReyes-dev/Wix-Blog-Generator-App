@@ -19,7 +19,7 @@ export default function ArticleReviewEditorPreview() {
     <main style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gap: 16 }}>
       <header>
         <h1 style={{ margin: '0 0 8px', color: '#172033' }}>Article review preview</h1>
-        <p style={{ margin: 0, color: '#5c6472' }}>Edit the sample article and simulate saving without contacting Wix.</p>
+        <p style={{ margin: 0, color: '#5c6472' }}>Edit the sample article, explore its publication-style layout, and simulate saving without contacting Wix.</p>
       </header>
       {draftSaved ? (
         <StatusPanel
@@ -31,6 +31,7 @@ export default function ArticleReviewEditorPreview() {
       <ArticleReviewEditor
         article={MOCK_GENERATED_ARTICLE}
         sources={[]}
+        media={[]}
         isSaving={isSaving}
         draftSaved={draftSaved}
         onSave={handleMockSave}

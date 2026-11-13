@@ -24,6 +24,8 @@ export type ArticleSection = {
   body: string;
 };
 
+export type MediaPlacement = import("./media-reference-types").MediaPlacement;
+
 export type GeneratedArticle = {
   title: string;
   introduction: string;
@@ -31,6 +33,7 @@ export type GeneratedArticle = {
   conclusion: string;
   metaDescription: string;
   seoKeywords: string[];
+  mediaPlacements?: MediaPlacement[];
 };
 
 export type DraftSubmission = {
@@ -39,6 +42,7 @@ export type DraftSubmission = {
   body: string;
   metaDescription: string;
   seoKeywords: string[];
+  mediaPlacements: MediaPlacement[];
 };
 
 type RichTextDecoration =
@@ -54,11 +58,27 @@ type RichTextDecoration =
     };
 
 type RichTextNode = {
-  type: 'TEXT' | 'PARAGRAPH' | 'HEADING';
+  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION';
   nodes?: RichTextNode[];
   textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
   headingData?: { level: number; textStyle: { textAlignment: 'AUTO' } };
+  imageData?: {
+    containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER' };
+    image: { src: { id: string }; width: number; height: number };
+    altText: string;
+  };
+  videoData?: {
+    containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER' };
+    video: { src: { id: string }; duration?: number };
+    thumbnail?: { src: { id: string }; width: number; height: number };
+  };
+  audioData?: {
+    containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER' };
+    audio: { src: { id: string } };
+    name: string;
+    disableDownload: boolean;
+  };
 };
 
 export type WixRichContent = { nodes: RichTextNode[] };
@@ -121,7 +141,10 @@ export function parseBlogBrief(value: unknown): BlogBrief {
   };
 }
 
-export function parseGeneratedArticle(value: unknown): GeneratedArticle {
+export function parseGeneratedArticle(
+  value: unknown,
+  mediaReferences: Array<{ id: string; name: string }> = [],
+): GeneratedArticle {
   const input = record(value);
   if (!Array.isArray(input.sections) || input.sections.length < 2 || input.sections.length > 8) {
     throw new InputValidationError('The generated article must contain between 2 and 8 sections.');
@@ -143,6 +166,50 @@ export function parseGeneratedArticle(value: unknown): GeneratedArticle {
     metaDescription: requiredText(input.metaDescription, 'Meta description', BLOG_EXCERPT_MAX_LENGTH),
     seoKeywords: keywordList(input.seoKeywords, 'SEO keyword'),
   };
+
+  if (mediaReferences.length > 0) {
+    const supplied = Array.isArray(input.mediaPlacements) ? input.mediaPlacements : [];
+    const suppliedById = new Map<string, Record<string, unknown>>();
+    for (const entry of supplied) {
+      const placement = record(entry);
+      const id = typeof placement.referenceId === 'string' ? placement.referenceId : '';
+      if (!id || suppliedById.has(id)) {
+        throw new InputValidationError('The generated media placement list contains a duplicate or invalid reference ID.');
+      }
+      suppliedById.set(id, placement);
+    }
+
+    const allowedIds = new Set(mediaReferences.map((reference) => reference.id));
+    if (Array.from(suppliedById.keys()).some((id) => !allowedIds.has(id))) {
+      throw new InputValidationError('The generated article referenced media that was not attached.');
+    }
+
+    article.mediaPlacements = mediaReferences.map((reference, index) => {
+      const placement = suppliedById.get(reference.id);
+      const sectionIndex = placement?.sectionIndex;
+      const afterParagraph = placement?.afterParagraph;
+      if (sectionIndex !== undefined &&
+          (typeof sectionIndex !== 'number' || !Number.isInteger(sectionIndex) || sectionIndex < -1 || sectionIndex > sections.length)) {
+        throw new InputValidationError('A generated media placement has an invalid article section.');
+      }
+      if (afterParagraph !== undefined &&
+          (typeof afterParagraph !== 'number' || !Number.isInteger(afterParagraph) || afterParagraph < 0 || afterParagraph > 20)) {
+        throw new InputValidationError('A generated media placement has an invalid paragraph position.');
+      }
+
+      return {
+        referenceId: reference.id,
+        sectionIndex: typeof sectionIndex === 'number' ? sectionIndex : index % (sections.length + 1),
+        afterParagraph: typeof afterParagraph === 'number' ? afterParagraph : 0,
+        caption: typeof placement?.caption === 'string'
+          ? placement.caption.trim().slice(0, 500)
+          : reference.name,
+        altText: typeof placement?.altText === 'string'
+          ? placement.altText.trim().slice(0, 500)
+          : reference.name,
+      };
+    });
+  }
 
   if (articleToEditableBody(article).length > BLOG_BODY_MAX_LENGTH) {
     throw new InputValidationError('The generated article is too long. Generate a shorter article.');
@@ -169,12 +236,42 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     throw new InputValidationError('A valid submission ID is required.');
   }
 
+  const rawPlacements = input.mediaPlacements === undefined ? [] : input.mediaPlacements;
+  if (!Array.isArray(rawPlacements) || rawPlacements.length > 4) {
+    throw new InputValidationError('The draft media placements are invalid.');
+  }
+  const seenReferences = new Set<string>();
+  const mediaPlacements = rawPlacements.map((entry, index): MediaPlacement => {
+    const placement = record(entry);
+    const referenceId = requiredText(placement.referenceId, `Media placement ${index + 1} reference ID`, 36);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(referenceId) || seenReferences.has(referenceId)) {
+      throw new InputValidationError('Each media file must have one valid placement.');
+    }
+    seenReferences.add(referenceId);
+    const sectionIndex = placement.sectionIndex;
+    const afterParagraph = placement.afterParagraph;
+    if (typeof sectionIndex !== 'number' || !Number.isInteger(sectionIndex) || sectionIndex < -1 || sectionIndex > 8) {
+      throw new InputValidationError('A media placement has an invalid section.');
+    }
+    if (typeof afterParagraph !== 'number' || !Number.isInteger(afterParagraph) || afterParagraph < 0 || afterParagraph > 20) {
+      throw new InputValidationError('A media placement has an invalid paragraph position.');
+    }
+    return {
+      referenceId,
+      sectionIndex,
+      afterParagraph,
+      caption: typeof placement.caption === 'string' ? placement.caption.trim().slice(0, 500) : '',
+      altText: typeof placement.altText === 'string' ? placement.altText.trim().slice(0, 500) : '',
+    };
+  });
+
   return {
     submissionId,
     title: requiredText(input.title, 'Draft title', BLOG_TITLE_MAX_LENGTH),
     body: requiredText(input.body, 'Article content', BLOG_BODY_MAX_LENGTH),
     metaDescription: requiredText(input.metaDescription, 'Meta description', BLOG_EXCERPT_MAX_LENGTH),
     seoKeywords: keywordList(input.seoKeywords, 'SEO keyword'),
+    mediaPlacements,
   };
 }
 
@@ -242,17 +339,133 @@ function headingNode(text: string, level: number, sources: Array<{ id: string; u
   };
 }
 
-export function bodyToRichContent(body: string, sources: Array<{ id: string; url: string }> = []): WixRichContent {
+type WixMediaAsset = {
+  referenceId: string;
+  fileId: string;
+  name: string;
+  kind: import("./media-reference-types").MediaKind;
+  fileUrl: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+  videoMediaId?: string;
+  videoThumbnailId?: string;
+};
+
+function mediaRichNode(
+  asset: WixMediaAsset,
+  placement: MediaPlacement | undefined,
+): RichTextNode {
+  const caption = placement?.caption?.trim() || asset.name;
+  const altText = placement?.altText?.trim() || asset.name;
+  const containerData = { width: { size: 'CONTENT' }, alignment: 'CENTER' };
+
+  if (asset.kind === 'image') {
+    return {
+      type: 'IMAGE',
+      nodes: caption ? [{ type: 'CAPTION', nodes: [textNode(caption)] }] : [],
+      imageData: {
+        containerData,
+        image: {
+          src: { id: asset.fileId },
+          width: asset.width ?? 1600,
+          height: asset.height ?? 1000,
+        },
+        altText,
+      },
+    };
+  }
+
+  if (asset.kind === 'video') {
+    return {
+      type: 'VIDEO',
+      videoData: {
+        containerData,
+        video: {
+          src: { id: asset.videoMediaId ?? `video/${asset.fileId}/1080p/mp4/file.mp4` },
+          ...(asset.durationSeconds ? { duration: asset.durationSeconds } : {}),
+        },
+        ...(asset.videoThumbnailId ? {
+          thumbnail: {
+            src: { id: asset.videoThumbnailId },
+            width: asset.width ?? 1280,
+            height: asset.height ?? 720,
+          },
+        } : {}),
+      },
+    };
+  }
+
+  if (asset.kind === 'audio') {
+    return {
+      type: 'AUDIO',
+      nodes: [],
+      audioData: {
+        containerData,
+        audio: { src: { id: `mp3/${asset.fileId}` } },
+        name: caption,
+        disableDownload: false,
+      },
+    };
+  }
+
+  const decoration: RichTextDecoration = {
+    type: 'LINK',
+    linkData: { link: { url: asset.fileUrl, target: 'BLANK', rel: { noreferrer: true } } },
+  };
+  return {
+    type: 'PARAGRAPH',
+    nodes: [textNode('Download attachment: '), textNode(caption || asset.name, [decoration])],
+    paragraphData: { textStyle: { textAlignment: 'AUTO' } },
+  };
+}
+
+export function bodyToRichContent(
+  body: string,
+  sources: Array<{ id: string; url: string }> = [],
+  mediaAssets: WixMediaAsset[] = [],
+  placements: MediaPlacement[] = [],
+): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
+  const assetByReference = new Map(mediaAssets.map((asset) => [asset.referenceId, asset] as const));
+  const placementByReference = new Map(placements.map((placement) => [placement.referenceId, placement] as const));
+  const insertedReferences = new Set<string>();
+
+  const insertAt = (sectionIndex: number, paragraphIndex: number) => {
+    for (const placement of placements) {
+      if (placement.sectionIndex !== sectionIndex || placement.afterParagraph !== paragraphIndex) continue;
+      const asset = assetByReference.get(placement.referenceId);
+      if (!asset || insertedReferences.has(placement.referenceId)) continue;
+      contentBlocks.push(mediaRichNode(asset, placement));
+      if (asset.kind === 'video' && placement.caption.trim()) {
+        contentBlocks.push(paragraphNode(placement.caption.trim(), sources));
+      }
+      insertedReferences.add(placement.referenceId);
+    }
+  };
+
+  const lines = body.replace(/\r\n?/g, '\n').split('\n');
+  const headingTitles = lines
+    .map((line) => /^(#{1,6})\s+(.+)$/.exec(line.trim())?.[2]?.trim().toLowerCase() ?? '')
+    .filter(Boolean);
+  const sectionCount = headingTitles.filter((heading) =>
+    heading !== 'introduction' && heading !== 'conclusion' && heading !== 'sources',
+  ).length;
+
+  let currentSection = -1;
+  let paragraphCount = 0;
+  let nextSection = 0;
   let paragraphLines: string[] = [];
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0) return;
     contentBlocks.push(paragraphNode(paragraphLines.join(' '), sources));
     paragraphLines = [];
+    paragraphCount += 1;
+    insertAt(currentSection, paragraphCount);
   };
 
-  for (const line of body.replace(/\r\n?/g, '\n').split('\n')) {
+  for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
       flushParagraph();
@@ -263,10 +476,22 @@ export function bodyToRichContent(body: string, sources: Array<{ id: string; url
     if (headingMatch) {
       flushParagraph();
       const hashes = headingMatch[1] ?? '';
-      const heading = headingMatch[2]?.trim();
-      if (heading) {
-        contentBlocks.push(headingNode(heading, Math.max(2, hashes.length), sources));
+      const heading = headingMatch[2]?.trim() ?? '';
+      const normalizedHeading = heading.toLowerCase();
+
+      if (normalizedHeading === 'introduction') {
+        currentSection = -1;
+      } else if (normalizedHeading === 'conclusion') {
+        currentSection = sectionCount;
+      } else if (normalizedHeading === 'sources') {
+        currentSection = -2;
+      } else {
+        currentSection = nextSection;
+        nextSection += 1;
       }
+      paragraphCount = 0;
+      contentBlocks.push(headingNode(heading, Math.max(2, hashes.length), sources));
+      insertAt(currentSection, 0);
       continue;
     }
 
@@ -274,6 +499,17 @@ export function bodyToRichContent(body: string, sources: Array<{ id: string; url
   }
 
   flushParagraph();
+
+  // If a user removes or renames the target heading while editing, never silently drop an attachment.
+  for (const asset of mediaAssets) {
+    if (insertedReferences.has(asset.referenceId)) continue;
+    const placement = placementByReference.get(asset.referenceId);
+    contentBlocks.push(mediaRichNode(asset, placement));
+    if (asset.kind === 'video' && placement?.caption?.trim()) {
+      contentBlocks.push(paragraphNode(placement.caption.trim(), sources));
+    }
+    insertedReferences.add(asset.referenceId);
+  }
 
   const nodes: RichTextNode[] = [];
   contentBlocks.forEach((block, index) => {
@@ -284,7 +520,7 @@ export function bodyToRichContent(body: string, sources: Array<{ id: string; url
   const richContent: WixRichContent = { nodes };
   const byteCount = new TextEncoder().encode(JSON.stringify(richContent)).byteLength;
   if (byteCount > BLOG_RICH_CONTENT_MAX_BYTES) {
-    throw new InputValidationError('The article is too large for a Wix Blog draft.');
+    throw new InputValidationError('The article and its media blocks are too large for a Wix Blog draft.');
   }
 
   return richContent;

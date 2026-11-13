@@ -18,6 +18,8 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
+import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -244,4 +246,105 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
+});
+
+
+test('article media references receive one validated editorial placement each', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A close look at the finished product.',
+      altText: 'Finished product on a wooden table.',
+    }],
+  }, [{ id: referenceId, name: 'product.png' }]);
+
+  assert.deepEqual(article.mediaPlacements, [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 1,
+    caption: 'A close look at the finished product.',
+    altText: 'Finished product on a wooden table.',
+  }]);
+
+  assert.throws(() => parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{ referenceId: 'unknown-reference', sectionIndex: 0, afterParagraph: 0 }],
+  }, [{ id: referenceId, name: 'product.png' }]), InputValidationError);
+});
+
+test('Wix Rich Content inserts the original uploaded image at its reviewed placement', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const body = '## Introduction\\n\\nAn opening paragraph.\\n\\n## Build a steady routine\\n\\nA section paragraph.\\n\\n## Make the room comfortable\\n\\nAnother paragraph.\\n\\n## Conclusion\\n\\nA closing paragraph.';
+  const richContent = bodyToRichContent(body, [], [{
+    referenceId,
+    fileId: 'site_image_file_id~mv2.png',
+    name: 'room.png',
+    kind: 'image',
+    fileUrl: 'https://static.wixstatic.com/media/site_image_file_id~mv2.png',
+    width: 1200,
+    height: 800,
+  }], [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 0,
+    caption: 'A quiet reading corner.',
+    altText: 'A chair beside a lamp and bookshelf.',
+  }]);
+
+  const imageNode = richContent.nodes.find((node) => node.type === 'IMAGE');
+  assert.ok(imageNode);
+  assert.equal(imageNode.imageData.image.src.id, 'site_image_file_id~mv2.png');
+  assert.equal(imageNode.imageData.altText, 'A chair beside a lamp and bookshelf.');
+  assert.equal(imageNode.nodes[0].type, 'CAPTION');
+});
+
+test('media input validation recognizes image, video, audio, and downloadable document types', () => {
+  assert.equal(getMediaFileInfo('cover.PNG')?.kind, 'image');
+  assert.equal(getMediaFileInfo('launch.MOV')?.kind, 'video');
+  assert.equal(getMediaFileInfo('interview.mp3')?.kind, 'audio');
+  assert.equal(getMediaFileInfo('press-kit.PDF')?.kind, 'document');
+  assert.equal(getMediaFileInfo('unknown.exe'), null);
+
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const references = parseMediaReferences([{
+    id: referenceId,
+    name: 'interview.mp3',
+    kind: 'audio',
+    notes: '',
+    frames: [],
+  }]);
+  assert.equal(references[0].kind, 'audio');
+
+  const uploads = parseDraftMediaInputs([{
+    referenceId,
+    fileId: 'site_audio_file_id',
+    name: 'interview.mp3',
+    kind: 'audio',
+    mimeType: 'audio/mpeg',
+  }]);
+  assert.equal(uploads[0].fileId, 'site_audio_file_id');
+});
+
+
+test('Wix rich content keeps video and audio playable and documents downloadable', () => {
+  const references = [
+    { referenceId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357', fileId: 'site_video_file_id', name: 'launch.mp4', kind: 'video', fileUrl: 'https://video.wixstatic.com/video/site_video_file_id/file', videoMediaId: 'video/site_video_file_id/1080p/mp4/file.mp4', durationSeconds: 42 },
+    { referenceId: 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358', fileId: 'site_audio_file_id', name: 'interview.mp3', kind: 'audio', fileUrl: 'https://static.wixstatic.com/media/site_audio_file_id' },
+    { referenceId: 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359', fileId: 'site_pdf_file_id', name: 'press-kit.pdf', kind: 'document', fileUrl: 'https://static.wixstatic.com/media/site_pdf_file_id' },
+  ];
+  const placements = references.map((reference, index) => ({
+    referenceId: reference.referenceId,
+    sectionIndex: -1,
+    afterParagraph: index,
+    caption: reference.name,
+    altText: reference.name,
+  }));
+  const richContent = bodyToRichContent('## Introduction\\n\\nOpening paragraph.', [], references, placements);
+  assert.equal(richContent.nodes.some((node) => node.type === 'VIDEO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'AUDIO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'PARAGRAPH' && node.nodes?.some((child) => child.textData?.text === 'press-kit.pdf')), true);
 });
