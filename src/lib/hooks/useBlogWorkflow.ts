@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { httpClient } from "@wix/essentials";
 import type { GeneratedArticle } from "../blog-content";
-import type { ArticleDesignSettings } from "../article-layout";
+import type { ArticleDesignSettings, ArticleSectionLayout } from "../article-layout";
 import { createMockDraft, generateMockArticle } from "../dev/mock-blog-workflow";
 import { getMediaFileInfo } from "../media-file-types";
 import { uploadFileToWix, type WixUploadTarget } from "../media-upload";
@@ -32,7 +32,7 @@ type WorkflowNotice = {
   tone: "info" | "error" | "success";
 };
 
-type DraftInput = { title: string; body: string; mediaPlacements: MediaPlacement[] };
+type DraftInput = { title: string; body: string; mediaPlacements: MediaPlacement[]; sectionLayouts: ArticleSectionLayout[]; design: ArticleDesignSettings };
 type ApiError = { error?: string };
 type WorkflowMode = "live" | "mock";
 
@@ -209,7 +209,7 @@ export function useBlogWorkflow({ mode = "live" }: { mode?: WorkflowMode } = {})
     setUploadedMedia((current) => current.filter((item) => item.referenceId !== referenceId));
   }, []);
 
-  const createDraft = useCallback(async ({ title, body, mediaPlacements }: DraftInput): Promise<void> => {
+  const createDraft = useCallback(async ({ title, body, mediaPlacements, sectionLayouts, design }: DraftInput): Promise<void> => {
     if (!article || draftSaved) return;
 
     setIsSaving(true);
@@ -252,6 +252,8 @@ export function useBlogWorkflow({ mode = "live" }: { mode?: WorkflowMode } = {})
           ...(mediaItem.durationSeconds ? { durationSeconds: mediaItem.durationSeconds } : {}),
         })),
         mediaPlacements,
+        sectionLayouts,
+        design,
       });
 
       const draft = result.draft;

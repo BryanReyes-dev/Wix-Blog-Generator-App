@@ -8,7 +8,7 @@ import {
 } from '../blog-content.ts';
 import type { ResearchSource } from './research-sources';
 import type { MediaReference } from './media-references';
-import { ARTICLE_MEDIA_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from '../article-layout';
+import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from '../article-layout';
 
 export class AiProviderError extends Error {
   public readonly status: number;
@@ -31,6 +31,7 @@ const articleOutputSchema = z.object({
   sections: z.array(z.object({
     heading: z.string(),
     body: z.string(),
+    layout: z.enum(ARTICLE_SECTION_LAYOUTS),
   }).strict()),
   conclusion: z.string(),
   metaDescription: z.string(),
@@ -122,7 +123,7 @@ export async function generateBlogArticle(
   const system = [
     'Write a useful, original blog article from the supplied brief.',
     'Generate one valid JSON object representing a structured article with the exact fields title, introduction, sections, conclusion, metaDescription, seoKeywords, and mediaPlacements. Always include mediaPlacements as an array; use an empty array when no original media references are supplied. When media references are supplied, include exactly one placement for every reference.',
-    'The sections field must contain 2-8 section objects, each with heading and body string fields.',
+    'The sections field must contain 2-8 section objects, each with heading, body, and layout fields. layout must be standard, callout, or steps. Use standard for most sections, callout for one concise emphasis or practical warning, and steps only when the section describes a procedure; for steps, write each individual step as its own paragraph separated by a blank line, without adding numbers. Only use patterns enabled by the selected template.',
     'Hard validation limits: title 1-200 characters; introduction 1-5000 characters; each section heading 1-120 characters; each section body 1-5000 characters; conclusion 1-4000 characters; metaDescription 1-500 characters; seoKeywords must contain no more than 5 strings, each 1-80 characters.',
     'Keep the complete article body (introduction, section headings and bodies, and conclusion) under 30000 characters.',
     'Use plain text in each field. Do not put Markdown fences or heading markers inside the individual fields.',

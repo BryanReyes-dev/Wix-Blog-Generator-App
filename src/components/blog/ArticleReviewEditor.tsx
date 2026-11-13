@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { articleToEditableBody, type GeneratedArticle } from "../../lib/blog-content";
 import type { MediaPlacement, ResearchSource, UploadedMedia } from "../../lib/media-reference-types";
-import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from "../../lib/article-layout";
+import { ARTICLE_TEMPLATES, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings, type ArticleSectionLayout } from "../../lib/article-layout";
 import { ActionButton } from "../ui/ActionButton";
 import { FormField } from "../ui/FormField";
 import styles from "./BlogWorkflow.module.css";
@@ -14,7 +14,7 @@ type ArticleReviewEditorProps = {
   media: UploadedMedia[];
   isSaving: boolean;
   draftSaved: boolean;
-  onSave: (draft: { title: string; body: string; mediaPlacements: MediaPlacement[] }) => Promise<void>;
+  onSave: (draft: { title: string; body: string; mediaPlacements: MediaPlacement[]; sectionLayouts: ArticleSectionLayout[]; design: ArticleDesignSettings }) => Promise<void>;
 };
 
 function renderCitations(value: string, sources: ResearchSource[]): ReactNode[] {
@@ -36,6 +36,15 @@ function renderCitations(value: string, sources: ResearchSource[]): ReactNode[] 
 
   if (cursor < value.length) parts.push(value.slice(cursor));
   return parts;
+}
+
+function getSectionHeadings(body: string): string[] {
+  return body.replace(/\r\n?/g, "\n").split("\n")
+    .map((line) => /^(#{1,6})\s+(.+)$/.exec(line.trim())?.[2]?.trim() ?? "")
+    .filter((heading) => {
+      const normalized = heading.toLowerCase();
+      return Boolean(heading) && normalized !== "introduction" && normalized !== "conclusion" && normalized !== "sources";
+    });
 }
 
 function mediaKindLabel(kind: UploadedMedia["kind"]): string {
@@ -87,6 +96,7 @@ function renderPreviewBody(
   media: UploadedMedia[],
   placements: MediaPlacement[],
   sectionCount: number,
+  sectionLayouts: ArticleSectionLayout[],
   skipMediaId?: string,
 ) {
   const blocks = body.split(/\n{2,}/).map((value) => value.trim()).filter(Boolean);
@@ -152,7 +162,20 @@ function renderPreviewBody(
       const items = block.split("\n").map((line) => line.replace(/^[-*]\s+/, "").trim()).filter(Boolean);
       nodes.push(<ul className={styles.previewList} key={"list-" + index}>{items.map((item, itemIndex) => <li key={itemIndex}>{renderCitations(item, sources)}</li>)}</ul>);
     } else {
-      nodes.push(<p className={styles.editorialPreviewParagraph} key={"paragraph-" + index}>{renderCitations(block, sources)}</p>);
+      const paragraph = <p className={styles.editorialPreviewParagraph} key={"paragraph-" + index}>{renderCitations(block, sources)}</p>;
+      const sectionLayout = currentSection >= 0 ? sectionLayouts[currentSection] ?? "standard" : "standard";
+      if (sectionLayout === "callout") {
+        nodes.push(<blockquote className={styles.editorialSectionCallout} key={"callout-" + index}>{paragraph}</blockquote>);
+      } else if (sectionLayout === "steps") {
+        nodes.push(
+          <div className={styles.editorialStep} key={"step-" + index}>
+            <span>{String(paragraphCount + 1).padStart(2, "0")}</span>
+            {paragraph}
+          </div>,
+        );
+      } else {
+        nodes.push(paragraph);
+      }
     }
     paragraphCount += 1;
     insertMedia(currentSection, paragraphCount);
@@ -181,6 +204,7 @@ export function ArticleReviewEditor({
   const [title, setTitle] = useState(article.title);
   const [body, setBody] = useState(articleToEditableBody(article));
   const [mediaPlacements, setMediaPlacements] = useState<MediaPlacement[]>(article.mediaPlacements ?? []);
+  const [sectionLayouts, setSectionLayouts] = useState<ArticleSectionLayout[]>(article.sections.map((section) => section.layout ?? "standard"));
   const [activeDesign, setActiveDesign] = useState<ArticleDesignSettings>(design);
 
   useEffect(() => {
@@ -197,6 +221,7 @@ export function ArticleReviewEditor({
     setTitle(article.title);
     setBody(articleToEditableBody(article));
     setMediaPlacements(article.mediaPlacements ?? []);
+    setSectionLayouts(article.sections.map((section) => section.layout ?? "standard"));
   }, [article]);
 
   useEffect(() => {
@@ -208,6 +233,8 @@ export function ArticleReviewEditor({
     () => new Map(media.map((item) => [item.referenceId, item] as const)),
     [media],
   );
+  const sectionHeadings = getSectionHeadings(body);
+  const activeSectionLayouts = sectionHeadings.map((_, index) => sectionLayouts[index] ?? "standard");
   const availableSections = [
     { value: -1, label: "Introduction" },
     ...article.sections.map((section, index) => ({ value: index, label: section.heading })),
@@ -251,7 +278,7 @@ export function ArticleReviewEditor({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void onSave({ title, body, mediaPlacements });
+    void onSave({ title, body, mediaPlacements, sectionLayouts: activeSectionLayouts, design: activeDesign });
   };
 
   return (
@@ -278,10 +305,47 @@ export function ArticleReviewEditor({
             <textarea className={styles.editorialBodyInput} id="draft-body" name="body" rows={24} maxLength={30000} value={body} onChange={(event) => setBody(event.target.value)} required />
           </FormField>
 
+          <section className={styles.sectionPatternPanel} aria-label="Article section patterns">
+            <div className={styles.mediaPlacementHeader}>
+              <div>
+                <span className={styles.editorialKicker}>02 / CONTENT DESIGN</span>
+                <h4>Choose section patterns</h4>
+                <p>Use reusable structures to give important passages more shape. The complete article remains editable above.</p>
+              </div>
+            </div>
+            {sectionHeadings.length === 0 ? (
+              <p className={styles.emptyState}>Add a Markdown section heading such as “## Overview” to choose a pattern for that section.</p>
+            ) : (
+              <div className={styles.sectionPatternList}>
+                {sectionHeadings.map((heading, index) => (
+                  <label className={styles.sectionPatternRow} key={index}>
+                    <span>{heading}</span>
+                    <select
+                      value={activeSectionLayouts[index] ?? "standard"}
+                      onChange={(event) => {
+                        const nextLayout = event.target.value as ArticleSectionLayout;
+                        if (!(ARTICLE_SECTION_LAYOUTS as readonly string[]).includes(nextLayout)) return;
+                        setSectionLayouts((current) => {
+                          const next = [...current];
+                          next[index] = nextLayout;
+                          return next;
+                        });
+                      }}
+                    >
+                      <option value="standard">Standard text</option>
+                      <option value="callout" disabled={!getArticleTemplate(activeDesign.templateId).allowedSectionLayouts.includes("callout")}>Callout</option>
+                      <option value="steps" disabled={!getArticleTemplate(activeDesign.templateId).allowedSectionLayouts.includes("steps")}>Numbered steps</option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section className={styles.mediaPlacementPanel} aria-label="Article media placement">
             <div className={styles.mediaPlacementHeader}>
               <div>
-                <span className={styles.editorialKicker}>02 / ART DIRECTION</span>
+                <span className={styles.editorialKicker}>03 / ART DIRECTION</span>
                 <h4>Place your media</h4>
                 <p>Use wide images, split features, or group related images into a gallery. All uploaded originals remain available to the draft.</p>
                 {media.filter((item) => item.kind === "image").length > 1 && getArticleTemplate(activeDesign.templateId).allowedMediaLayouts.includes("gallery") ? (
@@ -426,7 +490,7 @@ export function ArticleReviewEditor({
             </div>
             <div className={styles.editorialHeroCaption}>A story composed for the reader — with original media from your upload.</div>
             <div className={styles.editorialArticleBody}>
-              {renderPreviewBody(body, sources, media, mediaPlacements, article.sections.length, leadImage?.referenceId)}
+              {renderPreviewBody(body, sources, media, mediaPlacements, article.sections.length, activeSectionLayouts, leadImage?.referenceId)}
             </div>
             <footer className={styles.editorialPublicationFooter}>
               <span>THE DAILY EDITION</span>

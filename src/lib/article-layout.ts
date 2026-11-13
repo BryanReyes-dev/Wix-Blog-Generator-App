@@ -1,5 +1,7 @@
 export const ARTICLE_MEDIA_LAYOUTS = ["wide", "split-left", "split-right", "gallery"] as const;
 export type ArticleMediaLayout = typeof ARTICLE_MEDIA_LAYOUTS[number];
+export const ARTICLE_SECTION_LAYOUTS = ["standard", "callout", "steps"] as const;
+export type ArticleSectionLayout = typeof ARTICLE_SECTION_LAYOUTS[number];
 export type ArticleTemplateId = "editorial" | "minimal" | "visual";
 export type ArticleContentDensity = "balanced" | "visual-rich" | "quiet";
 export type ArticleDesignSettings = { templateId: ArticleTemplateId; accentColor: string; density: ArticleContentDensity };
@@ -10,10 +12,11 @@ export const ARTICLE_TEMPLATES: Array<{
   description: string;
   accentColor: string;
   allowedMediaLayouts: ArticleMediaLayout[];
+  allowedSectionLayouts: ArticleSectionLayout[];
 }> = [
-  { id: "editorial", name: "Editorial magazine", description: "Warm typography, spacious sections, and flexible image compositions.", accentColor: "#8A6E4B", allowedMediaLayouts: ["wide", "split-left", "split-right", "gallery"] },
-  { id: "minimal", name: "Minimal journal", description: "Quiet styling, restrained visual emphasis, and clear reading rhythm.", accentColor: "#465366", allowedMediaLayouts: ["wide", "split-left", "split-right"] },
-  { id: "visual", name: "Visual magazine", description: "Image-forward storytelling, paired imagery, and bold section breaks.", accentColor: "#B84B32", allowedMediaLayouts: ["wide", "split-left", "split-right", "gallery"] },
+  { id: "editorial", name: "Editorial magazine", description: "Warm typography, spacious sections, and flexible image compositions.", accentColor: "#8A6E4B", allowedMediaLayouts: ["wide", "split-left", "split-right", "gallery"], allowedSectionLayouts: ["standard", "callout", "steps"] },
+  { id: "minimal", name: "Minimal journal", description: "Quiet styling, restrained visual emphasis, and clear reading rhythm.", accentColor: "#465366", allowedMediaLayouts: ["wide", "split-left", "split-right"], allowedSectionLayouts: ["standard", "callout"] },
+  { id: "visual", name: "Visual magazine", description: "Image-forward storytelling, paired imagery, and bold section breaks.", accentColor: "#B84B32", allowedMediaLayouts: ["wide", "split-left", "split-right", "gallery"], allowedSectionLayouts: ["standard", "callout", "steps"] },
 ];
 
 export const DEFAULT_ARTICLE_DESIGN: ArticleDesignSettings = { templateId: "editorial", accentColor: "#8A6E4B", density: "balanced" };

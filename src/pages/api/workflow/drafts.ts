@@ -172,6 +172,7 @@ export const POST: APIRoute = async ({ request }) => {
       citationSources,
       mediaAssets,
       submission.mediaPlacements,
+      submission.sectionLayouts,
     );
 
     await verifyWixBlogInstalled();

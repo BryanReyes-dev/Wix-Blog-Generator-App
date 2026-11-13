@@ -1,4 +1,4 @@
-import { ARTICLE_MEDIA_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate } from "./article-layout";
+import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, parseArticleDesign, type ArticleDesignSettings, type ArticleSectionLayout } from "./article-layout";
 export const BLOG_TITLE_MAX_LENGTH = 200;
 export const BLOG_EXCERPT_MAX_LENGTH = 500;
 export const BLOG_BODY_MAX_LENGTH = 30_000;
@@ -23,6 +23,7 @@ export type BlogBrief = {
 export type ArticleSection = {
   heading: string;
   body: string;
+  layout: ArticleSectionLayout;
 };
 
 export type MediaPlacement = import("./media-reference-types").MediaPlacement;
@@ -44,6 +45,8 @@ export type DraftSubmission = {
   metaDescription: string;
   seoKeywords: string[];
   mediaPlacements: MediaPlacement[];
+  sectionLayouts: ArticleSectionLayout[];
+  design: ArticleDesignSettings;
 };
 
 type RichTextDecoration =
@@ -59,7 +62,7 @@ type RichTextDecoration =
     };
 
 type RichTextNode = {
-  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION' | 'TABLE' | 'TABLE_ROW' | 'TABLE_CELL' | 'GALLERY';
+  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION' | 'TABLE' | 'TABLE_ROW' | 'TABLE_CELL' | 'GALLERY' | 'BLOCKQUOTE' | 'ORDERED_LIST' | 'LIST_ITEM';
   nodes?: RichTextNode[];
   textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
@@ -82,6 +85,8 @@ type RichTextNode = {
   };
   tableCellData?: { cellStyle: { verticalAlignment: 'MIDDLE' }; borderColors: Record<string, never> };
   tableData?: { dimensions: { colsWidthRatio: number[]; colsMinWidth: number[]; rowsHeight: number[] } };
+  blockquoteData?: { indentation: number };
+  orderedListData?: { indentation: number };
   galleryData?: {
     containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER'; textWrap: true };
     items: Array<{ image: { media: { src: { id: string }; width: number; height: number } } }>;
@@ -159,11 +164,19 @@ export function parseGeneratedArticle(
     throw new InputValidationError('The generated article must contain between 2 and 8 sections.');
   }
 
+  const allowedSectionLayouts = getArticleTemplate(design.templateId).allowedSectionLayouts;
   const sections = input.sections.map((section, index) => {
     const sectionRecord = record(section);
+    const requestedLayout = sectionRecord.layout;
+    const layout = typeof requestedLayout === 'string' &&
+      (ARTICLE_SECTION_LAYOUTS as readonly string[]).includes(requestedLayout) &&
+      allowedSectionLayouts.includes(requestedLayout as ArticleSectionLayout)
+      ? requestedLayout as ArticleSectionLayout
+      : 'standard';
     return {
       heading: requiredText(sectionRecord.heading, `Section ${index + 1} heading`, 120),
       body: requiredText(sectionRecord.body, `Section ${index + 1} content`, 5_000),
+      layout,
     };
   });
 
@@ -252,6 +265,13 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     throw new InputValidationError('A valid submission ID is required.');
   }
 
+  let design: ArticleDesignSettings;
+  try {
+    design = parseArticleDesign(input.design);
+  } catch (error) {
+    throw new InputValidationError(error instanceof Error ? error.message : 'The article design settings are invalid.');
+  }
+
   const rawPlacements = input.mediaPlacements === undefined ? [] : input.mediaPlacements;
   if (!Array.isArray(rawPlacements) || rawPlacements.length > 4) {
     throw new InputValidationError('The draft media placements are invalid.');
@@ -272,16 +292,36 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     if (typeof afterParagraph !== 'number' || !Number.isInteger(afterParagraph) || afterParagraph < 0 || afterParagraph > 20) {
       throw new InputValidationError('A media placement has an invalid paragraph position.');
     }
+    const layout = typeof placement.layout === 'string' &&
+      (ARTICLE_MEDIA_LAYOUTS as readonly string[]).includes(placement.layout)
+      ? placement.layout as typeof ARTICLE_MEDIA_LAYOUTS[number]
+      : 'wide';
+    if (!getArticleTemplate(design.templateId).allowedMediaLayouts.includes(layout)) {
+      throw new InputValidationError('The selected article template does not support one of the media layouts.');
+    }
     return {
       referenceId,
       sectionIndex,
       afterParagraph,
       caption: typeof placement.caption === 'string' ? placement.caption.trim().slice(0, 500) : '',
       altText: typeof placement.altText === 'string' ? placement.altText.trim().slice(0, 500) : '',
-      layout: typeof placement.layout === 'string' && (ARTICLE_MEDIA_LAYOUTS as readonly string[]).includes(placement.layout) ? placement.layout as typeof ARTICLE_MEDIA_LAYOUTS[number] : 'wide',
+      layout,
       galleryGroup: typeof placement.galleryGroup === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(placement.galleryGroup.trim()) ? placement.galleryGroup.trim() : '',
       layoutText: typeof placement.layoutText === 'string' ? placement.layoutText.trim().slice(0, 700) : '',
     };
+  });
+
+  const rawSectionLayouts = input.sectionLayouts === undefined ? [] : input.sectionLayouts;
+  if (!Array.isArray(rawSectionLayouts) || rawSectionLayouts.length > 8) {
+    throw new InputValidationError('The draft section layouts are invalid.');
+  }
+  const allowedSectionLayouts = getArticleTemplate(design.templateId).allowedSectionLayouts;
+  const sectionLayouts = rawSectionLayouts.map((layout) => {
+    if (typeof layout !== 'string' || !(ARTICLE_SECTION_LAYOUTS as readonly string[]).includes(layout) ||
+        !allowedSectionLayouts.includes(layout as ArticleSectionLayout)) {
+      throw new InputValidationError('One of the section patterns is not available in the selected template.');
+    }
+    return layout as ArticleSectionLayout;
   });
 
   return {
@@ -291,6 +331,8 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     metaDescription: requiredText(input.metaDescription, 'Meta description', BLOG_EXCERPT_MAX_LENGTH),
     seoKeywords: keywordList(input.seoKeywords, 'SEO keyword'),
     mediaPlacements,
+    sectionLayouts,
+    design,
   };
 }
 
@@ -455,14 +497,26 @@ export function bodyToRichContent(
   sources: Array<{ id: string; url: string }> = [],
   mediaAssets: WixMediaAsset[] = [],
   placements: MediaPlacement[] = [],
+  sectionLayouts: ArticleSectionLayout[] = [],
 ): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
+  let pendingStepItems: RichTextNode[] = [];
+  const flushStepList = () => {
+    if (pendingStepItems.length === 0) return;
+    contentBlocks.push({
+      type: 'ORDERED_LIST',
+      nodes: pendingStepItems,
+      orderedListData: { indentation: 0 },
+    });
+    pendingStepItems = [];
+  };
   const assetByReference = new Map(mediaAssets.map((asset) => [asset.referenceId, asset] as const));
   const placementByReference = new Map(placements.map((placement) => [placement.referenceId, placement] as const));
   const insertedReferences = new Set<string>();
 
   const insertAt = (sectionIndex: number, paragraphIndex: number) => {
     const matching = placements.filter((placement) => placement.sectionIndex === sectionIndex && placement.afterParagraph === paragraphIndex);
+    if (matching.length > 0) flushStepList();
     for (const placement of matching) {
       if (insertedReferences.has(placement.referenceId)) continue;
       const asset = assetByReference.get(placement.referenceId);
@@ -497,7 +551,21 @@ export function bodyToRichContent(
 
   const flushParagraph = () => {
     if (paragraphLines.length === 0) return;
-    contentBlocks.push(paragraphNode(paragraphLines.join(' '), sources));
+    const paragraph = paragraphNode(paragraphLines.join(' '), sources);
+    const sectionLayout = currentSection >= 0 ? sectionLayouts[currentSection] ?? 'standard' : 'standard';
+    if (sectionLayout === 'callout') {
+      flushStepList();
+      contentBlocks.push({
+        type: 'BLOCKQUOTE',
+        nodes: [paragraph],
+        blockquoteData: { indentation: 1 },
+      });
+    } else if (sectionLayout === 'steps') {
+      pendingStepItems.push({ type: 'LIST_ITEM', nodes: [paragraph] });
+    } else {
+      flushStepList();
+      contentBlocks.push(paragraph);
+    }
     paragraphLines = [];
     paragraphCount += 1;
     insertAt(currentSection, paragraphCount);
@@ -513,6 +581,7 @@ export function bodyToRichContent(
     const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
     if (headingMatch) {
       flushParagraph();
+      flushStepList();
       const hashes = headingMatch[1] ?? '';
       const heading = headingMatch[2]?.trim() ?? '';
       const normalizedHeading = heading.toLowerCase();
@@ -537,6 +606,7 @@ export function bodyToRichContent(
   }
 
   flushParagraph();
+  flushStepList();
 
   // If a user removes or renames the target heading while editing, never silently drop an attachment.
   for (const asset of mediaAssets) {

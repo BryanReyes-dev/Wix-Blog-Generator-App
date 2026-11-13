@@ -51,8 +51,8 @@ const validArticle = () => ({
   title: 'A Practical Guide to Better Sleep',
   introduction: 'Small habits can make bedtime more consistent.',
   sections: [
-    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.' },
-    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.' },
+    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.', layout: 'standard' },
+    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.', layout: 'standard' },
   ],
   conclusion: 'Start with one change and keep it manageable.',
   metaDescription: 'Simple ways to build a calmer, more consistent sleep routine.',
@@ -468,4 +468,50 @@ test('Wix Rich Content renders paired images as a gallery and split images as ta
   assert.equal(gallery.galleryData.items.length, 2);
   assert.ok(split);
   assert.equal(split.nodes[0].nodes.length, 2);
+});
+
+
+test('generated article section patterns are constrained by the selected template', () => {
+  const generated = {
+    ...validArticle(),
+    sections: [
+      { heading: 'A useful warning', body: 'Avoid overwatering the plant.', layout: 'callout' },
+      { heading: 'A simple routine', body: 'Check the soil.\n\nWater only when needed.', layout: 'steps' },
+    ],
+  };
+  const editorial = parseGeneratedArticle(generated, [], {
+    templateId: 'editorial', accentColor: '#8A6E4B', density: 'balanced',
+  });
+  assert.deepEqual(editorial.sections.map((section) => section.layout), ['callout', 'steps']);
+
+  const minimal = parseGeneratedArticle(generated, [], {
+    templateId: 'minimal', accentColor: '#465366', density: 'quiet',
+  });
+  assert.deepEqual(minimal.sections.map((section) => section.layout), ['callout', 'standard']);
+});
+
+test('Wix Rich Content serializes callout and step section patterns', () => {
+  const body = '## Introduction\n\nOpening paragraph.\n\n## A useful warning\n\nAvoid overwatering the plant.\n\n## A simple routine\n\nCheck the soil first.\n\nWater only when needed.';
+  const richContent = bodyToRichContent(body, [], [], [], ['callout', 'steps']);
+  const callout = richContent.nodes.find((node) => node.type === 'BLOCKQUOTE');
+  const steps = richContent.nodes.find((node) => node.type === 'ORDERED_LIST');
+  assert.ok(callout);
+  assert.equal(callout.nodes[0].type, 'PARAGRAPH');
+  assert.ok(steps);
+  assert.equal(steps.nodes.length, 2);
+  assert.equal(steps.nodes[0].type, 'LIST_ITEM');
+});
+
+test('draft submission carries validated article design and section patterns', () => {
+  const submission = parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title,
+    body: '## Introduction\n\nOpening.\n\n## A section\n\nBody.',
+    metaDescription: validArticle().metaDescription,
+    seoKeywords: validArticle().seoKeywords,
+    design: { templateId: 'visual', accentColor: '#B84B32', density: 'visual-rich' },
+    sectionLayouts: ['steps'],
+  });
+  assert.equal(submission.design.templateId, 'visual');
+  assert.deepEqual(submission.sectionLayouts, ['steps']);
 });
