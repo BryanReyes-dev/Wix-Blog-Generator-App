@@ -84,6 +84,27 @@ function getErrorName(error: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
+function getErrorRecord(error: unknown): Record<string, unknown> {
+  return error && typeof error === 'object'
+    ? error as Record<string, unknown>
+    : {};
+}
+
+function getSafeErrorMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return value
+    .replace(/Bearer\\s+\\S+/gi, 'Bearer [redacted]')
+    .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
+    .slice(0, 500);
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  const record = getErrorRecord(error);
+  const response = getErrorRecord(record.response);
+  const status = record.statusCode ?? record.status ?? response.status;
+  return typeof status === 'number' && Number.isFinite(status) ? status : undefined;
+}
+
 export async function generateBlogArticle(
   brief: BlogBrief,
   config: ArticleGeneratorConfig,
@@ -205,13 +226,39 @@ export async function generateBlogArticle(
       );
     }
 
-    const message = error instanceof Error ? error.message : '';
-    if (/credit|quota|billing|payment/i.test(message)) {
-      throw new AiProviderError('Wix AI could not complete the request. Check the installing site owner’s available Wix AI credits and app permissions.', 503);
+    const record = getErrorRecord(error);
+    const cause = getErrorRecord(record.cause);
+    const message = error instanceof Error ? error.message : getSafeErrorMessage(record.message) ?? '';
+    const causeMessage = getSafeErrorMessage(cause.message);
+    const status = getErrorStatus(error);
+    const code = getSafeErrorMessage(record.code);
+    const causeCode = getSafeErrorMessage(cause.code);
+
+    console.error('[workflow/generate] Wix AI provider request failed:', {
+      name: getErrorName(error) ?? 'UnknownError',
+      message: getSafeErrorMessage(message) ?? 'No error message',
+      status: status ?? 'unknown',
+      code: code ?? 'unknown',
+      causeName: getSafeErrorMessage(cause.name) ?? 'unknown',
+      causeMessage: causeMessage ?? 'unknown',
+      causeCode: causeCode ?? 'unknown',
+      model: modelName,
+      hasResearchSources: Boolean(config.researchSources?.length),
+      hasMediaReferences: Boolean(config.mediaReferences?.length),
+    });
+
+    if (status === 401 || status === 403 || /permission|forbidden|unauthorized|scope/i.test(message + ' ' + (code ?? '') + ' ' + (causeMessage ?? ''))) {
+      throw new AiProviderError(
+        'Wix AI access was denied. Verify the app has the Invoke AI Models permission and approve the updated app installation on the development site.',
+        503,
+      );
     }
-    if (/permission|forbidden|unauthorized|scope/i.test(message)) {
-      throw new AiProviderError('Wix AI access was denied. Confirm the app has the Invoke AI Models permission and the site installation is authorized.', 503);
+    if (status === 429 || /credit|quota|billing|payment/i.test(message + ' ' + (code ?? '') + ' ' + (causeMessage ?? ''))) {
+      throw new AiProviderError('Wix AI could not complete the request because the model request was rate-limited or credits may be unavailable. Check the installing Wix user’s AI availability and retry.', 503);
     }
-    throw new AiProviderError('Wix AI could not complete the request. Check the app’s Wix AI permissions and try again.');
+    if (status === 400 || status === 404 || /unsupported model|invalid model|bad request/i.test(message + ' ' + (code ?? '') + ' ' + (causeMessage ?? ''))) {
+      throw new AiProviderError('Wix AI rejected the request. Verify WIX_AI_MODEL is a model currently supported by Wix AI and retry with a shorter brief.', 502);
+    }
+    throw new AiProviderError('Wix AI could not complete the request. Check the local Wix development terminal for the [workflow/generate] diagnostic details.');
   }
 }
