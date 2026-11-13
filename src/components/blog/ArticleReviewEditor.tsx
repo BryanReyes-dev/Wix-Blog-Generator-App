@@ -447,9 +447,13 @@ export function ArticleReviewEditor({
               <select value={activeDesign.templateId} onChange={(event) => {
                 const templateId = event.target.value as ArticleDesignSettings["templateId"];
                 updateDesign({ templateId, accentColor: getArticleTemplate(templateId).accentColor });
-                const allowed = getArticleTemplate(templateId).allowedMediaLayouts;
+                const template = getArticleTemplate(templateId);
+                const allowed = template.allowedMediaLayouts;
                 setMediaPlacements((current) => current.map((placement) =>
                   placement.layout && !allowed.includes(placement.layout) ? { ...placement, layout: "wide", galleryGroup: "" } : placement,
+                ));
+                setSectionLayouts((current) => current.map((layout) =>
+                  template.allowedSectionLayouts.includes(layout) ? layout : "standard",
                 ));
               }}>
                 {ARTICLE_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}

@@ -7,14 +7,17 @@ export const MOCK_GENERATED_ARTICLE: GeneratedArticle = {
     {
       heading: 'Build a steady routine',
       body: 'Choose a consistent time to begin winding down. Keep the routine simple enough to repeat on busy evenings.',
+      layout: 'standard',
     },
     {
       heading: 'Make the room comfortable',
       body: 'Reduce distracting light and noise, and choose a room temperature that feels comfortable for sleeping.',
+      layout: 'callout',
     },
     {
       heading: 'Keep the changes manageable',
       body: 'Start with one adjustment, observe how it feels, and build on the habits that work for you.',
+      layout: 'steps',
     },
   ],
   conclusion: 'A better routine is usually built through small changes repeated consistently. Choose one habit to start with and give it time to become familiar.',
