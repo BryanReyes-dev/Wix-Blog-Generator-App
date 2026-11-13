@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import type { BlogBriefInput } from '../../lib/hooks/useBlogWorkflow';
+import { useVisualReferences } from '../../lib/hooks/useVisualReferences';
 import { BlogBriefForm } from '../blog/BlogBriefForm';
 import { StatusPanel } from '../ui/StatusPanel';
 
 export default function BlogBriefFormPreview() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [message, setMessage] = useState('');
+  const visualReferences = useVisualReferences((statusMessage) => {
+    setMessage(statusMessage);
+  });
 
   const handleGenerate = async (brief: BlogBriefInput) => {
     setIsGenerating(true);
@@ -22,7 +26,15 @@ export default function BlogBriefFormPreview() {
         <p style={{ margin: 0, color: '#5c6472' }}>Edit the form independently. Submitting only displays a local preview message.</p>
       </header>
       {message ? <StatusPanel title="Local preview" message={message} tone="success" /> : null}
-      <BlogBriefForm isGenerating={isGenerating} onGenerate={handleGenerate} />
+      <BlogBriefForm
+        isGenerating={isGenerating}
+        isPreparingMedia={visualReferences.isPreparingMedia}
+        mediaReferences={visualReferences.mediaReferences}
+        onAddMediaFiles={visualReferences.addFiles}
+        onMediaNoteChange={visualReferences.updateNote}
+        onRemoveMedia={visualReferences.removeReference}
+        onGenerate={handleGenerate}
+      />
     </main>
   );
 }
