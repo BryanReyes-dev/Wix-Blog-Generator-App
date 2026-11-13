@@ -93,7 +93,7 @@ function getErrorRecord(error: unknown): Record<string, unknown> {
 function getSafeErrorMessage(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   return value
-    .replace(/Bearer\\s+\\S+/gi, 'Bearer [redacted]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
     .replace(/sk-[A-Za-z0-9_-]+/g, '[redacted]')
     .slice(0, 500);
 }
