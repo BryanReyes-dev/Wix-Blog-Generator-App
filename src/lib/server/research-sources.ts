@@ -446,7 +446,25 @@ async function fetchResearchPage(
     }
 
     if (!response.ok) {
-      throw new ResearchSourceError('A research page could not be retrieved. Check that the URL is public and accessible.', 422);
+      const hostname = currentUrl.hostname;
+      const status = response.status;
+      const reason = status === 401 || status === 403
+        ? 'The publisher denied the app\'s server-side request. The page may be public in a browser but unavailable to automated retrieval.'
+        : status === 404
+          ? 'The publisher says this page was not found.'
+          : status === 429
+            ? 'The publisher rate-limited automated requests. Wait before retrying.'
+            : status >= 500
+              ? 'The publisher returned a server error.'
+              : 'The publisher did not return a successful page response.';
+
+      console.warn('[workflow/research] Source retrieval returned a non-success status.', {
+        hostname,
+        status,
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type') ?? 'unknown',
+      });
+      throw new ResearchSourceError(hostname + ' returned HTTP ' + status + '. ' + reason, 422);
     }
 
     const contentType = (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase();
