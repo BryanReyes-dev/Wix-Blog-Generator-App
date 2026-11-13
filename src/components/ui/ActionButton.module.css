@@ -4,13 +4,18 @@
   align-items: center;
   justify-content: center;
   width: fit-content;
-  min-height: 40px;
-  padding: 0 16px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 0 clamp(12px, 1.4cqi, 16px);
   border: 1px solid transparent;
   border-radius: 999px;
   font: inherit;
   font-size: 13px;
   font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
   cursor: pointer;
   transition: opacity 120ms ease, background-color 120ms ease, border-color 120ms ease;
 }

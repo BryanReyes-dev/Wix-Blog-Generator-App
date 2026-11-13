@@ -1,3 +1,15 @@
+/* Container used by the real Wix custom element and the isolated dev preview. */
+.widgetContainer {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  container-type: inline-size;
+  container-name: blog-workflow;
+}
+
+/* Main workflow surface */
 
 .root {
   box-sizing: border-box;
@@ -6,17 +18,23 @@
   align-content: start;
 
   width: 100%;
-  max-width: none;
+  min-width: 0;
+  max-width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
 
   margin: 0;
-  padding: clamp(16px, 3vw, 48px);
-  gap: clamp(20px, 2vw, 32px);
+  padding: clamp(12px, 3cqi, 48px);
+  gap: clamp(16px, 2.2cqi, 32px);
 
   background: #f8fafc;
   color: #172033;
   font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.root > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Header */
@@ -26,22 +44,35 @@
   flex-direction: column;
   align-items: stretch;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
   min-width: 0;
+}
+
+.workflowTopBar > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workflowTopBar > button {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .title {
   margin: 0;
-  font-size: clamp(22px, 2vw, 32px);
+  font-size: clamp(22px, 2.2cqi, 34px);
   line-height: 1.2;
+  text-wrap: balance;
 }
 
 .workflowIntro {
-  max-width: 760px;
+  max-width: 72ch;
   margin: 8px 0 0;
   color: #5c6472;
-  font-size: 14px;
+  font-size: clamp(14px, 1.15cqi, 16px);
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 /* Forms */
@@ -50,15 +81,21 @@
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: clamp(14px, 1.6cqi, 22px);
 
   width: 100%;
   min-width: 0;
-  padding: clamp(16px, 2vw, 28px);
+  max-width: 100%;
+  padding: clamp(16px, 2cqi, 32px);
 
   border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: #ffffff;
+}
+
+.workflowForm > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .workflowInput,
@@ -68,6 +105,7 @@
 
   width: 100%;
   min-width: 0;
+  max-width: 100%;
 
   border: 1px solid #cdd4df;
   border-radius: 8px;
@@ -96,21 +134,30 @@
 .reviewSection {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
+  gap: clamp(16px, 1.8cqi, 24px);
   width: 100%;
   min-width: 0;
+  max-width: 100%;
+}
+
+.reviewSection > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .workflowSectionTitle {
   margin: 0;
   color: #172033;
-  font-size: clamp(19px, 1.5vw, 24px);
+  font-size: clamp(19px, 1.6cqi, 26px);
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 .metadataCard {
   box-sizing: border-box;
   min-width: 0;
-  padding: 16px 20px;
+  max-width: 100%;
+  padding: clamp(14px, 1.6cqi, 24px);
 
   border: 1px solid #e1e6ef;
   border-radius: 12px;
@@ -138,6 +185,7 @@
 }
 
 .keywordList li {
+  max-width: 100%;
   border-radius: 999px;
   padding: 5px 10px;
   background: #edf3ff;
@@ -147,32 +195,55 @@
 
 /* TABLET: 640px and above */
 
-@media (min-width: 640px) {
+@container blog-workflow (min-width: 640px) {
   .root {
-    padding: clamp(24px, 3vw, 40px);
+    padding: clamp(24px, 2.8cqi, 40px);
+    gap: clamp(20px, 2cqi, 28px);
   }
 
   .workflowTopBar {
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: 24px;
   }
 
+  .workflowTopBar > button {
+    width: fit-content;
+  }
+
   .workflowForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
+  }
+
+  /* Keep long-form fields and primary actions on their own row. */
+  .workflowForm > div:has(.workflowTextarea),
+  .workflowForm > div:nth-last-child(2),
+  .workflowForm > button {
+    grid-column: 1 / -1;
+  }
+
+  .workflowForm > button {
+    width: fit-content;
   }
 }
 
 /* DESKTOP: 1024px and above */
 
-@media (min-width: 1024px) {
+@container blog-workflow (min-width: 1024px) {
   .root {
-    padding: clamp(32px, 3vw, 56px);
+    padding: clamp(32px, 3cqi, 56px);
     gap: 28px;
+  }
+
+  .workflowTopBar {
+    align-items: center;
+    gap: 32px;
   }
 
   .workflowForm {
     gap: 22px;
+    padding: clamp(24px, 2.2cqi, 32px);
   }
 
   .reviewSection {
@@ -180,16 +251,20 @@
   }
 
   .metadataCard {
-    padding: 20px 24px;
+    padding: clamp(20px, 1.8cqi, 24px);
   }
 }
 
 /* LARGE DESKTOP: 1440px and above */
 
-@media (min-width: 1440px) {
+@container blog-workflow (min-width: 1440px) {
   .root {
-    padding: 48px 64px;
+    padding: 48px clamp(48px, 4.4cqi, 72px);
     gap: 32px;
+  }
+
+  .workflowTopBar {
+    gap: 40px;
   }
 
   .workflowForm {
@@ -199,5 +274,9 @@
 
   .reviewSection {
     gap: 24px;
+  }
+
+  .metadataCard {
+    padding: 24px;
   }
 }
