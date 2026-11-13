@@ -721,6 +721,7 @@
 
 
 /* Reusable article design presets and responsive, non-single-column media compositions. */
+.editorialMediaWide{}
 .articleDesignFields{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .articleAccentInput{box-sizing:border-box;width:100%;min-height:42px;padding:4px;border:1px solid #d8d0c3;border-radius:4px;background:#fffefa;cursor:pointer}
 .articleDesignControls{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 12px;padding:12px;border:1px solid #e5ded2;background:#fffefa}

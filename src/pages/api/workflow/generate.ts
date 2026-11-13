@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request }) => {
     const input = body as Record<string, unknown>;
     const researchLinks = parseResearchLinkEntries(input.researchLinks ?? input.researchUrls);
     const mediaReferences = parseMediaReferences(input.mediaReferences);
-    let design;
+    let design: import('../../../lib/article-layout').ArticleDesignSettings;
     try {
       design = parseArticleDesign(input.design);
     } catch (error) {
