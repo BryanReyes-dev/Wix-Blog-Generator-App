@@ -13,6 +13,7 @@ import {
   ResearchSourceError,
 } from '../../../lib/server/research-sources';
 import { MediaReferenceError, parseMediaReferences } from '../../../lib/server/media-references';
+import { parseArticleDesign } from '../../../lib/article-layout';
 
 type ServerEnvironment = ImportMetaEnv & {
   WIX_AI_MODEL?: string;
@@ -37,6 +38,12 @@ export const POST: APIRoute = async ({ request }) => {
     const input = body as Record<string, unknown>;
     const researchLinks = parseResearchLinkEntries(input.researchLinks ?? input.researchUrls);
     const mediaReferences = parseMediaReferences(input.mediaReferences);
+    let design;
+    try {
+      design = parseArticleDesign(input.design);
+    } catch (error) {
+      throw new InputValidationError(error instanceof Error ? error.message : 'The article design settings are invalid.');
+    }
     const loadedSources = await loadResearchSources(researchLinks.map((link) => link.url));
     const researchSources = loadedSources.map((source, index) => ({
       ...source,
@@ -47,11 +54,12 @@ export const POST: APIRoute = async ({ request }) => {
       model: environment.WIX_AI_MODEL?.trim() || 'gpt-5-mini',
       researchSources,
       mediaReferences,
+      design,
     });
 
     let article;
     try {
-      article = parseGeneratedArticle(generated, mediaReferences);
+      article = parseGeneratedArticle(generated, mediaReferences, design);
       assertCitationIntegrity(article, researchSources);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'Unknown validation error';

@@ -28,6 +28,9 @@ export type MediaPlacement = {
   afterParagraph: number;
   caption: string;
   altText: string;
+  layout?: import("./article-layout").ArticleMediaLayout;
+  galleryGroup?: string;
+  layoutText?: string;
 };
 
 export type UploadedMedia = {

@@ -1,3 +1,4 @@
+import { ARTICLE_MEDIA_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate } from "./article-layout";
 export const BLOG_TITLE_MAX_LENGTH = 200;
 export const BLOG_EXCERPT_MAX_LENGTH = 500;
 export const BLOG_BODY_MAX_LENGTH = 30_000;
@@ -58,7 +59,7 @@ type RichTextDecoration =
     };
 
 type RichTextNode = {
-  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION';
+  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION' | 'TABLE' | 'TABLE_ROW' | 'TABLE_CELL' | 'GALLERY';
   nodes?: RichTextNode[];
   textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
@@ -78,6 +79,13 @@ type RichTextNode = {
     audio: { src: { id: string } };
     name: string;
     disableDownload: boolean;
+  };
+  tableCellData?: { cellStyle: { verticalAlignment: 'MIDDLE' }; borderColors: Record<string, never> };
+  tableData?: { dimensions: { colsWidthRatio: number[]; colsMinWidth: number[]; rowsHeight: number[] } };
+  galleryData?: {
+    containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER'; textWrap: true };
+    items: Array<{ image: { media: { src: { id: string }; width: number; height: number } } }>;
+    options: { layout: { type: 'GRID'; horizontalScroll: false; orientation: 'COLUMNS'; numberOfColumns: number }; item: { ratio: number; crop: 'FILL' }; thumbnails: { placement: 'NONE' } };
   };
 };
 
@@ -143,7 +151,8 @@ export function parseBlogBrief(value: unknown): BlogBrief {
 
 export function parseGeneratedArticle(
   value: unknown,
-  mediaReferences: Array<{ id: string; name: string }> = [],
+  mediaReferences: Array<{ id: string; name: string; kind?: import('./media-reference-types').MediaKind }> = [],
+  design: import('./article-layout').ArticleDesignSettings = DEFAULT_ARTICLE_DESIGN,
 ): GeneratedArticle {
   const input = record(value);
   if (!Array.isArray(input.sections) || input.sections.length < 2 || input.sections.length > 8) {
@@ -184,6 +193,7 @@ export function parseGeneratedArticle(
       throw new InputValidationError('The generated article referenced media that was not attached.');
     }
 
+    const template = getArticleTemplate(design.templateId);
     article.mediaPlacements = mediaReferences.map((reference, index) => {
       const placement = suppliedById.get(reference.id);
       const sectionIndex = placement?.sectionIndex;
@@ -197,16 +207,22 @@ export function parseGeneratedArticle(
         throw new InputValidationError('A generated media placement has an invalid paragraph position.');
       }
 
+      const requestedLayout = placement?.layout;
+      const allowedLayout = typeof requestedLayout === 'string' && (ARTICLE_MEDIA_LAYOUTS as readonly string[]).includes(requestedLayout) && template.allowedMediaLayouts.includes(requestedLayout as typeof ARTICLE_MEDIA_LAYOUTS[number])
+        ? requestedLayout as typeof ARTICLE_MEDIA_LAYOUTS[number]
+        : 'wide';
+      const isImage = reference.kind === undefined || reference.kind === 'image';
+      const layout = isImage ? allowedLayout : 'wide';
+      const galleryGroup = typeof placement?.galleryGroup === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(placement.galleryGroup.trim()) ? placement.galleryGroup.trim() : '';
       return {
         referenceId: reference.id,
         sectionIndex: typeof sectionIndex === 'number' ? sectionIndex : index % (sections.length + 1),
         afterParagraph: typeof afterParagraph === 'number' ? afterParagraph : 0,
-        caption: typeof placement?.caption === 'string'
-          ? placement.caption.trim().slice(0, 500)
-          : reference.name,
-        altText: typeof placement?.altText === 'string'
-          ? placement.altText.trim().slice(0, 500)
-          : reference.name,
+        caption: typeof placement?.caption === 'string' ? placement.caption.trim().slice(0, 500) : reference.name,
+        altText: typeof placement?.altText === 'string' ? placement.altText.trim().slice(0, 500) : reference.name,
+        layout: layout === 'gallery' && !galleryGroup ? 'wide' : layout,
+        galleryGroup: layout === 'gallery' ? galleryGroup : '',
+        layoutText: typeof placement?.layoutText === 'string' ? placement.layoutText.trim().slice(0, 700) : '',
       };
     });
   }
@@ -262,6 +278,9 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
       afterParagraph,
       caption: typeof placement.caption === 'string' ? placement.caption.trim().slice(0, 500) : '',
       altText: typeof placement.altText === 'string' ? placement.altText.trim().slice(0, 500) : '',
+      layout: typeof placement.layout === 'string' && (ARTICLE_MEDIA_LAYOUTS as readonly string[]).includes(placement.layout) ? placement.layout as typeof ARTICLE_MEDIA_LAYOUTS[number] : 'wide',
+      galleryGroup: typeof placement.galleryGroup === 'string' && /^[a-zA-Z0-9_-]{1,32}$/.test(placement.galleryGroup.trim()) ? placement.galleryGroup.trim() : '',
+      layoutText: typeof placement.layoutText === 'string' ? placement.layoutText.trim().slice(0, 700) : '',
     };
   });
 
@@ -361,19 +380,18 @@ function mediaRichNode(
   const containerData = { width: { size: 'CONTENT' }, alignment: 'CENTER' } as const;
 
   if (asset.kind === 'image') {
-    return {
+    const imageNode: RichTextNode = {
       type: 'IMAGE',
-      nodes: caption ? [{ type: 'CAPTION', nodes: [textNode(caption)] }] : [],
-      imageData: {
-        containerData,
-        image: {
-          src: { id: asset.fileId },
-          width: asset.width ?? 1600,
-          height: asset.height ?? 1000,
-        },
-        altText,
-      },
+      nodes: caption && placement?.layout !== 'split-left' && placement?.layout !== 'split-right' ? [{ type: 'CAPTION', nodes: [textNode(caption)] }] : [],
+      imageData: { containerData, image: { src: { id: asset.fileId }, width: asset.width ?? 1600, height: asset.height ?? 1000 }, altText },
     };
+    if (placement?.layout === 'split-left' || placement?.layout === 'split-right') {
+      const note = placement.layoutText?.trim() || caption;
+      const imageCell: RichTextNode = { type: 'TABLE_CELL', tableCellData: { cellStyle: { verticalAlignment: 'MIDDLE' }, borderColors: {} }, nodes: [imageNode] };
+      const textCell: RichTextNode = { type: 'TABLE_CELL', tableCellData: { cellStyle: { verticalAlignment: 'MIDDLE' }, borderColors: {} }, nodes: [headingNode('In focus', 3), paragraphNode(note)] };
+      return { type: 'TABLE', nodes: [{ type: 'TABLE_ROW', nodes: placement.layout === 'split-left' ? [imageCell, textCell] : [textCell, imageCell] }], tableData: { dimensions: { colsWidthRatio: [50, 50], colsMinWidth: [120, 120], rowsHeight: [250] } } };
+    }
+    return imageNode;
   }
 
   if (asset.kind === 'video') {
@@ -420,6 +438,18 @@ function mediaRichNode(
   };
 }
 
+function galleryRichNode(assets: WixMediaAsset[]): RichTextNode {
+  const items = assets.map((asset) => ({ image: { media: { src: { id: asset.fileId }, width: asset.width ?? 1200, height: asset.height ?? 900 } } }));
+  return {
+    type: 'GALLERY', nodes: [],
+    galleryData: {
+      containerData: { width: { size: 'CONTENT' }, alignment: 'CENTER', textWrap: true },
+      items,
+      options: { layout: { type: 'GRID', horizontalScroll: false, orientation: 'COLUMNS', numberOfColumns: items.length >= 3 ? 3 : 2 }, item: { ratio: 1.15, crop: 'FILL' }, thumbnails: { placement: 'NONE' } },
+    },
+  };
+}
+
 export function bodyToRichContent(
   body: string,
   sources: Array<{ id: string; url: string }> = [],
@@ -432,14 +462,22 @@ export function bodyToRichContent(
   const insertedReferences = new Set<string>();
 
   const insertAt = (sectionIndex: number, paragraphIndex: number) => {
-    for (const placement of placements) {
-      if (placement.sectionIndex !== sectionIndex || placement.afterParagraph !== paragraphIndex) continue;
+    const matching = placements.filter((placement) => placement.sectionIndex === sectionIndex && placement.afterParagraph === paragraphIndex);
+    for (const placement of matching) {
+      if (insertedReferences.has(placement.referenceId)) continue;
       const asset = assetByReference.get(placement.referenceId);
-      if (!asset || insertedReferences.has(placement.referenceId)) continue;
-      contentBlocks.push(mediaRichNode(asset, placement));
-      if (asset.kind === 'video' && placement.caption.trim()) {
-        contentBlocks.push(paragraphNode(placement.caption.trim(), sources));
+      if (!asset) continue;
+      if (placement.layout === 'gallery' && placement.galleryGroup && asset.kind === 'image') {
+        const group = matching.filter((candidate) => candidate.layout === 'gallery' && candidate.galleryGroup === placement.galleryGroup && !insertedReferences.has(candidate.referenceId) && assetByReference.get(candidate.referenceId)?.kind === 'image');
+        const groupAssets = group.map((candidate) => assetByReference.get(candidate.referenceId)!).filter(Boolean);
+        if (groupAssets.length > 1) {
+          contentBlocks.push(galleryRichNode(groupAssets));
+          group.forEach((candidate) => insertedReferences.add(candidate.referenceId));
+          continue;
+        }
       }
+      contentBlocks.push(mediaRichNode(asset, placement));
+      if (asset.kind === 'video' && placement.caption.trim()) contentBlocks.push(paragraphNode(placement.caption.trim(), sources));
       insertedReferences.add(placement.referenceId);
     }
   };
