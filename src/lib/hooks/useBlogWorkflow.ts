@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { httpClient } from "@wix/essentials";
 import type { GeneratedArticle } from "../blog-content";
+import type { ArticleDesignSettings } from "../article-layout";
 import { createMockDraft, generateMockArticle } from "../dev/mock-blog-workflow";
 import { getMediaFileInfo } from "../media-file-types";
 import { uploadFileToWix, type WixUploadTarget } from "../media-upload";
@@ -20,6 +21,7 @@ export type BlogBriefInput = {
   tone: string;
   instructions: string;
   seoKeywords: string;
+  design: ArticleDesignSettings;
   researchLinks: Array<Pick<ResearchLinkInput, "url" | "notes">>;
   mediaReferences: MediaReferenceInput[];
   mediaFiles: Array<{ referenceId: string; file: File }>;

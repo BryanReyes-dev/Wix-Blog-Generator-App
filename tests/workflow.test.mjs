@@ -21,6 +21,7 @@ import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
 import { loadResearchSources } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
+import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -321,6 +322,9 @@ test('Wix Rich Content inserts the original uploaded image at its reviewed place
     afterParagraph: 0,
     caption: 'A quiet reading corner.',
     altText: 'A chair beside a lamp and bookshelf.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
   }]);
 
   const imageNode = richContent.nodes.find((node) => node.type === 'IMAGE');
@@ -401,4 +405,67 @@ test('research source requests use standard browser-compatible headers', async (
   assert.equal(requestHeaders.get('accept-language'), 'en-US,en;q=0.9');
   assert.equal(sources.length, 1);
   assert.equal(sources[0].title, 'Accessible Houseplant Guide');
+});
+
+
+test('article design presets validate template, color, and visual density', () => {
+  assert.equal(ARTICLE_TEMPLATES.length, 3);
+  assert.deepEqual(parseArticleDesign(undefined), DEFAULT_ARTICLE_DESIGN);
+  assert.deepEqual(parseArticleDesign({
+    templateId: 'visual',
+    accentColor: '#b84b32',
+    density: 'visual-rich',
+  }), {
+    templateId: 'visual',
+    accentColor: '#B84B32',
+    density: 'visual-rich',
+  });
+  assert.throws(() => parseArticleDesign({ templateId: 'custom-css', accentColor: '#fff', density: 'balanced' }));
+  assert.throws(() => parseArticleDesign({ templateId: 'editorial', accentColor: 'red', density: 'balanced' }));
+});
+
+test('generated media layout is constrained by the selected template', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A useful visual note.',
+      altText: 'A potted plant beside a window.',
+      layout: 'gallery',
+      galleryGroup: 'plants-gallery',
+      layoutText: '',
+    }],
+  }, [{ id: referenceId, name: 'plant.png', kind: 'image' }], {
+    templateId: 'minimal',
+    accentColor: '#465366',
+    density: 'quiet',
+  });
+  assert.equal(article.mediaPlacements?.[0]?.layout, 'wide');
+  assert.equal(article.mediaPlacements?.[0]?.galleryGroup, '');
+});
+
+test('Wix Rich Content renders paired images as a gallery and split images as tables', () => {
+  const firstId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const secondId = 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358';
+  const thirdId = 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359';
+  const body = '## Introduction\n\nOpening paragraph.\n\n## Plant choices\n\nA section paragraph.';
+  const assets = [
+    { referenceId: firstId, fileId: 'site_image_one', name: 'plant-one.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_one', width: 1200, height: 900 },
+    { referenceId: secondId, fileId: 'site_image_two', name: 'plant-two.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_two', width: 1200, height: 900 },
+    { referenceId: thirdId, fileId: 'site_image_three', name: 'plant-three.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_three', width: 1200, height: 900 },
+  ];
+  const richContent = bodyToRichContent(body, [], assets, [
+    { referenceId: firstId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant one', altText: 'Plant one', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: secondId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant two', altText: 'Plant two', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: thirdId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant three', altText: 'Plant three', layout: 'split-right', galleryGroup: '', layoutText: 'An easy-care choice for a bright corner.' },
+  ]);
+  const gallery = richContent.nodes.find((node) => node.type === 'GALLERY');
+  const split = richContent.nodes.find((node) => node.type === 'TABLE');
+  assert.ok(gallery);
+  assert.equal(gallery.galleryData.items.length, 2);
+  assert.ok(split);
+  assert.equal(split.nodes[0].nodes.length, 2);
 });

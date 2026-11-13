@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useBlogWorkflow, type BlogBriefInput } from '../../lib/hooks/useBlogWorkflow';
 import { useVisualReferences } from '../../lib/hooks/useVisualReferences';
+import type { ArticleDesignSettings } from '../../lib/article-layout';
+import { DEFAULT_ARTICLE_DESIGN } from '../../lib/article-layout';
 import { ActionButton } from '../ui/ActionButton';
 import { StatusPanel } from '../ui/StatusPanel';
 import { ArticleReviewEditor } from './ArticleReviewEditor';
@@ -25,6 +27,7 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
     generateArticle,
     createDraft,
   } = useBlogWorkflow({ mode });
+  const [design, setDesign] = useState<ArticleDesignSettings>({ ...DEFAULT_ARTICLE_DESIGN });
   const [signOutError, setSignOutError] = useState('');
   const [mediaNotice, setMediaNotice] = useState<{
     message: string;
@@ -46,6 +49,7 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
 
   const handleGenerate = async (brief: BlogBriefInput) => {
     setMediaNotice(null);
+    setDesign(brief.design);
     await generateArticle(brief);
   };
 
@@ -97,6 +101,8 @@ export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
       {article ? (
         <ArticleReviewEditor
           article={article}
+          design={design}
+          onDesignChange={setDesign}
           sources={sources}
           media={uploadedMedia}
           isSaving={isSaving}

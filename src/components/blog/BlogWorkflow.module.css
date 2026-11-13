@@ -718,3 +718,45 @@
   .editorialHeroPlaceholder{margin-left:26px;margin-right:26px}
   .editorialArticleBody{padding-left:26px;padding-right:26px}
 }
+
+
+/* Reusable article design presets and responsive, non-single-column media compositions. */
+.articleDesignFields{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.articleAccentInput{box-sizing:border-box;width:100%;min-height:42px;padding:4px;border:1px solid #d8d0c3;border-radius:4px;background:#fffefa;cursor:pointer}
+.articleDesignControls{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 12px;padding:12px;border:1px solid #e5ded2;background:#fffefa}
+.articleDesignControls label{display:grid;gap:5px;color:#7a7062;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.articleDesignControls select{box-sizing:border-box;width:100%;min-height:36px;border:1px solid #ded6ca;border-radius:3px;padding:6px 8px;background:#fff;color:#37332d;font:inherit;letter-spacing:normal;text-transform:none}
+.editorialPublication{--article-accent:#8a6e4b}
+.editorialPublication[data-template="minimal"]{background:#fff;border-color:#dce1e8;color:#303b4b;font-family:Arial,Helvetica,sans-serif}
+.editorialPublication[data-template="minimal"] .editorialPreviewTitle,.editorialPublication[data-template="minimal"] .editorialPreviewHeading{font-family:Arial,Helvetica,sans-serif;letter-spacing:-.035em}
+.editorialPublication[data-template="visual"]{background:#fffdfb;border-color:#e6c9bf}
+.editorialPublication[data-template="visual"] .editorialPreviewTitle{font-family:Georgia,"Times New Roman",serif;font-size:clamp(32px,4cqi,52px);line-height:1.02}
+.editorialPublication .editorialArticleEyebrow,.editorialPublication .editorialPublicationHeader,.editorialPublication .editorialPublicationFooter{border-color:color-mix(in srgb,var(--article-accent) 28%,transparent)}
+.editorialPublication .editorialArticleEyebrow span:first-child,.editorialPublication .editorialKicker{color:var(--article-accent)}
+.editorialMediaFigure{box-sizing:border-box;display:grid;min-width:0;gap:8px;margin:22px 0}
+.editorialMediaVisual{display:block;width:100%;max-width:100%;max-height:620px;border-radius:3px;object-fit:cover}
+.editorialMediaAside{min-width:0}
+.editorialMediaLayoutText{margin:0 0 7px;color:#393b3e;font:600 15px/1.55 Georgia,"Times New Roman",serif}
+.editorialMediaCaption{margin:0;color:#81796d;font-size:11px;line-height:1.5}
+.editorialMediaGallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:24px 0}
+.editorialMediaGalleryItem{align-content:start;min-width:0;margin:0}
+.editorialMediaGalleryItem .editorialMediaVisual{aspect-ratio:4/3;max-height:none}
+.editorialMediaSplitLeft,.editorialMediaSplitRight{grid-template-columns:minmax(0,1fr);align-items:center;gap:12px;padding:12px;border:1px solid #e7e0d6;background:#fdfbf7}
+.editorialMediaSplitLeft .editorialMediaVisual,.editorialMediaSplitRight .editorialMediaVisual{aspect-ratio:4/3;max-height:340px}
+.editorialMediaSplitLeft .editorialMediaAside,.editorialMediaSplitRight .editorialMediaAside{padding:4px}
+.editorialPublication[data-density="visual-rich"] .editorialMediaFigure{margin-block:30px}
+.editorialPublication[data-density="visual-rich"] .editorialMediaGallery{gap:7px}
+.editorialPublication[data-density="quiet"] .editorialMediaFigure{margin-block:15px}
+.editorialPublication[data-density="quiet"] .editorialMediaSplitLeft,.editorialPublication[data-density="quiet"] .editorialMediaSplitRight{border-color:transparent;background:transparent}
+@container blog-workflow (min-width:640px){
+  .articleDesignFields,.articleDesignControls{grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+}
+@container blog-workflow (min-width:820px){
+  .editorialMediaSplitLeft,.editorialMediaSplitRight{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:18px;padding:16px}
+  .editorialMediaSplitRight .editorialMediaVisual{order:2}
+  .editorialMediaSplitRight .editorialMediaAside{order:1}
+}
+@container blog-workflow (min-width:1080px){
+  .editorialMediaGallery{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .editorialMediaSplitLeft,.editorialMediaSplitRight{gap:22px;padding:20px}
+}

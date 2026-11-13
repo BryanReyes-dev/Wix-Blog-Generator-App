@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { BlogBriefInput } from "../../lib/hooks/useBlogWorkflow";
+import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from "../../lib/article-layout";
 import type { MediaReference, ResearchLinkInput } from "../../lib/media-reference-types";
 import { formatBytes } from "../../lib/media-reference";
 import { ActionButton } from "../ui/ActionButton";
@@ -37,6 +38,7 @@ export function BlogBriefForm({
   onGenerate,
 }: BlogBriefFormProps) {
   const [researchLinks, setResearchLinks] = useState<ResearchLinkInput[]>([]);
+  const [design, setDesign] = useState<ArticleDesignSettings>({ ...DEFAULT_ARTICLE_DESIGN });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateResearchLink = (id: string, field: "url" | "notes", value: string) => {
@@ -61,6 +63,7 @@ export function BlogBriefForm({
       tone: String(formData.get("tone") ?? ""),
       instructions: String(formData.get("instructions") ?? ""),
       seoKeywords: String(formData.get("seoKeywords") ?? ""),
+      design,
       researchLinks: researchLinks.map(({ url, notes }) => ({ url, notes })),
       mediaReferences: mediaReferences.map(({ id, name, kind, notes, frames }) => ({ id, name, kind, notes, frames })),
       mediaFiles: mediaReferences.map(({ id, file }) => ({ referenceId: id, file })),
@@ -85,6 +88,35 @@ export function BlogBriefForm({
         <FormField label="Main points or instructions" htmlFor="blog-instructions" required>
           <textarea className={styles.workflowTextarea} id="blog-instructions" name="instructions" rows={5} maxLength={3000} placeholder="Include the points, examples, or instructions the article should cover." required />
         </FormField>
+
+        <section className={styles.fullWidthGroup} aria-label="Article design">
+          <div className={styles.sectionHeadingRow}>
+            <div>
+              <h3 className={styles.workflowSectionTitle}>Article design</h3>
+              <p className={styles.sectionHint}>Choose a reusable starting style. The AI uses only the prebuilt layouts enabled for that style.</p>
+            </div>
+          </div>
+          <div className={styles.articleDesignFields}>
+            <FormField label="Design preset" htmlFor="article-template">
+              <select className={styles.workflowInput} id="article-template" value={design.templateId} onChange={(event) => {
+                const templateId = event.target.value as ArticleDesignSettings["templateId"];
+                setDesign((current) => ({ ...current, templateId, accentColor: getArticleTemplate(templateId).accentColor }));
+              }}>
+                {ARTICLE_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+              </select>
+            </FormField>
+            <FormField label="Accent color" htmlFor="article-accent-color" hint="Preview accent; the published article inherits the Wix site's theme.">
+              <input className={styles.articleAccentInput} id="article-accent-color" type="color" value={design.accentColor} onChange={(event) => setDesign((current) => ({ ...current, accentColor: event.target.value.toUpperCase() }))} />
+            </FormField>
+            <FormField label="Visual density" htmlFor="article-density">
+              <select className={styles.workflowInput} id="article-density" value={design.density} onChange={(event) => setDesign((current) => ({ ...current, density: event.target.value as ArticleDesignSettings["density"] }))}>
+                <option value="balanced">Balanced</option>
+                <option value="visual-rich">Image-forward</option>
+                <option value="quiet">Quiet / minimal</option>
+              </select>
+            </FormField>
+          </div>
+        </section>
 
         <div className={styles.fullWidthGroup}>
           <FormField label="Optional SEO keywords" htmlFor="blog-keywords" hint="Separate keywords with commas. Up to five suggested keywords.">

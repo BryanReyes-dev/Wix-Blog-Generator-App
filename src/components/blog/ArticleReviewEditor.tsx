@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { articleToEditableBody, type GeneratedArticle } from "../../lib/blog-content";
 import type { MediaPlacement, ResearchSource, UploadedMedia } from "../../lib/media-reference-types";
+import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from "../../lib/article-layout";
 import { ActionButton } from "../ui/ActionButton";
 import { FormField } from "../ui/FormField";
 import styles from "./BlogWorkflow.module.css";
 
 type ArticleReviewEditorProps = {
   article: GeneratedArticle;
+  design?: ArticleDesignSettings;
+  onDesignChange?: (design: ArticleDesignSettings) => void;
   sources: ResearchSource[];
   media: UploadedMedia[];
   isSaving: boolean;
@@ -46,13 +49,22 @@ function renderEditorialMedia(
   media: UploadedMedia,
   placement: MediaPlacement,
   key: string,
+  galleryItem = false,
 ): ReactNode {
+  const layoutClass = galleryItem
+    ? styles.editorialMediaGalleryItem
+    : placement.layout === "split-left"
+      ? styles.editorialMediaSplitLeft
+      : placement.layout === "split-right"
+        ? styles.editorialMediaSplitRight
+        : styles.editorialMediaWide;
+
   return (
-    <figure className={styles.editorialMediaFigure} key={key}>
+    <figure className={styles.editorialMediaFigure + " " + layoutClass} key={key}>
       {media.kind === "image" ? (
-        <img src={media.fileUrl} alt={placement.altText || media.name} loading="lazy" />
+        <img className={styles.editorialMediaVisual} src={media.fileUrl} alt={placement.altText || media.name} loading="lazy" />
       ) : media.kind === "video" ? (
-        <video controls preload="metadata" src={media.fileUrl} poster={media.thumbnailUrl} />
+        <video className={styles.editorialMediaVisual} controls preload="metadata" src={media.fileUrl} poster={media.thumbnailUrl} />
       ) : media.kind === "audio" ? (
         <audio controls preload="metadata" src={media.fileUrl} />
       ) : (
@@ -61,7 +73,10 @@ function renderEditorialMedia(
           <span><strong>{media.name}</strong><small>Download attached file</small></span>
         </a>
       )}
-      {placement.caption ? <figcaption className={styles.editorialMediaCaption}>{placement.caption}</figcaption> : null}
+      <div className={styles.editorialMediaAside}>
+        {placement.layoutText ? <p className={styles.editorialMediaLayoutText}>{placement.layoutText}</p> : null}
+        {placement.caption ? <p className={styles.editorialMediaCaption}>{placement.caption}</p> : null}
+      </div>
     </figure>
   );
 }
@@ -83,10 +98,36 @@ function renderPreviewBody(
   let paragraphCount = 0;
 
   const insertMedia = (sectionIndex: number, afterParagraph: number) => {
-    placements.forEach((placement, order) => {
-      if (placement.sectionIndex !== sectionIndex || placement.afterParagraph !== afterParagraph) return;
+    const matching = placements.filter((placement) =>
+      placement.sectionIndex === sectionIndex && placement.afterParagraph === afterParagraph,
+    );
+    matching.forEach((placement, order) => {
+      if (inserted.has(placement.referenceId) || placement.referenceId === skipMediaId) return;
       const asset = mediaById.get(placement.referenceId);
-      if (!asset || inserted.has(placement.referenceId) || placement.referenceId === skipMediaId) return;
+      if (!asset) return;
+
+      if (placement.layout === "gallery" && placement.galleryGroup && asset.kind === "image") {
+        const group = matching.filter((candidate) =>
+          candidate.layout === "gallery" &&
+          candidate.galleryGroup === placement.galleryGroup &&
+          !inserted.has(candidate.referenceId) &&
+          candidate.referenceId !== skipMediaId &&
+          mediaById.get(candidate.referenceId)?.kind === "image",
+        );
+        if (group.length > 1) {
+          nodes.push(
+            <div className={styles.editorialMediaGallery} key={"gallery-" + placement.galleryGroup + "-" + order}>
+              {group.map((item, itemIndex) => {
+                const galleryAsset = mediaById.get(item.referenceId);
+                return galleryAsset ? renderEditorialMedia(galleryAsset, item, item.referenceId + "-gallery-" + itemIndex, true) : null;
+              })}
+            </div>,
+          );
+          group.forEach((item) => inserted.add(item.referenceId));
+          return;
+        }
+      }
+
       nodes.push(renderEditorialMedia(asset, placement, placement.referenceId + "-" + order));
       inserted.add(placement.referenceId);
     });
@@ -129,6 +170,8 @@ function renderPreviewBody(
 
 export function ArticleReviewEditor({
   article,
+  design = DEFAULT_ARTICLE_DESIGN,
+  onDesignChange,
   sources,
   media,
   isSaving,
@@ -138,6 +181,17 @@ export function ArticleReviewEditor({
   const [title, setTitle] = useState(article.title);
   const [body, setBody] = useState(articleToEditableBody(article));
   const [mediaPlacements, setMediaPlacements] = useState<MediaPlacement[]>(article.mediaPlacements ?? []);
+  const [activeDesign, setActiveDesign] = useState<ArticleDesignSettings>(design);
+
+  useEffect(() => {
+    setActiveDesign(design);
+  }, [design]);
+
+  const updateDesign = (patch: Partial<ArticleDesignSettings>) => {
+    const next = { ...activeDesign, ...patch };
+    setActiveDesign(next);
+    onDesignChange?.(next);
+  };
 
   useEffect(() => {
     setTitle(article.title);
@@ -166,6 +220,17 @@ export function ArticleReviewEditor({
     ));
   };
 
+  const groupImagesIntoGallery = () => {
+    const imagePlacements = mediaPlacements.filter((placement) => mediaById.get(placement.referenceId)?.kind === "image");
+    if (imagePlacements.length < 2) return;
+    const anchor = imagePlacements[0]!;
+    const imageIds = new Set(imagePlacements.map((placement) => placement.referenceId));
+    setMediaPlacements((current) => current.map((placement) => imageIds.has(placement.referenceId)
+      ? { ...placement, sectionIndex: anchor.sectionIndex, afterParagraph: anchor.afterParagraph, layout: "gallery", galleryGroup: "editorial-gallery" }
+      : placement,
+    ));
+  };
+
   const movePlacement = (referenceId: string, direction: -1 | 1) => {
     setMediaPlacements((current) => {
       const index = current.findIndex((placement) => placement.referenceId === referenceId);
@@ -178,7 +243,9 @@ export function ArticleReviewEditor({
   };
 
   const leadImagePlacement = mediaPlacements.find((placement) =>
-    placement.sectionIndex === -1 && placement.afterParagraph === 0 && mediaById.get(placement.referenceId)?.kind === "image",
+    placement.sectionIndex === -1 && placement.afterParagraph === 0 &&
+    (placement.layout === undefined || placement.layout === "wide") &&
+    mediaById.get(placement.referenceId)?.kind === "image",
   );
   const leadImage = leadImagePlacement ? mediaById.get(leadImagePlacement.referenceId) : undefined;
 
@@ -216,7 +283,10 @@ export function ArticleReviewEditor({
               <div>
                 <span className={styles.editorialKicker}>02 / ART DIRECTION</span>
                 <h4>Place your media</h4>
-                <p>Move each original upload into the story. All attached files are included in the draft.</p>
+                <p>Use wide images, split features, or group related images into a gallery. All uploaded originals remain available to the draft.</p>
+                {media.filter((item) => item.kind === "image").length > 1 && getArticleTemplate(activeDesign.templateId).allowedMediaLayouts.includes("gallery") ? (
+                  <button type="button" className={styles.secondaryAction} onClick={groupImagesIntoGallery}>Group images into gallery</button>
+                ) : null}
               </div>
               <span className={styles.editorialMediaCount}>{media.length} FILE{media.length === 1 ? "" : "S"}</span>
             </div>
@@ -246,6 +316,24 @@ export function ArticleReviewEditor({
                           {availableSections.map((section) => <option key={section.value} value={section.value}>{section.label}</option>)}
                         </select>
                       </label>
+                      {asset.kind === "image" ? (
+                        <label className={styles.editorialControlLabel}>
+                          IMAGE LAYOUT
+                          <select value={placement.layout ?? "wide"} onChange={(event) => {
+                            const layout = event.target.value as NonNullable<MediaPlacement["layout"]>;
+                            updatePlacement(placement.referenceId, {
+                              layout,
+                              galleryGroup: layout === "gallery" ? placement.galleryGroup || "editorial-gallery" : "",
+                            });
+                          }}>
+                            {getArticleTemplate(activeDesign.templateId).allowedMediaLayouts.map((layout) => (
+                              <option key={layout} value={layout}>
+                                {layout === "wide" ? "Full width" : layout === "split-left" ? "Split · image left" : layout === "split-right" ? "Split · image right" : "Gallery"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
                       <label className={styles.editorialControlLabel}>
                         POSITION
                         <select value={String(placement.afterParagraph)} onChange={(event) => updatePlacement(placement.referenceId, { afterParagraph: Number(event.target.value) })}>
@@ -253,6 +341,12 @@ export function ArticleReviewEditor({
                           <option value="1">After first paragraph</option>
                         </select>
                       </label>
+                      {asset.kind === "image" && (placement.layout === "split-left" || placement.layout === "split-right") ? (
+                        <label className={styles.editorialControlLabel}>
+                          SIDE NOTE / SUPPORTING COPY
+                          <textarea rows={3} maxLength={700} value={placement.layoutText ?? ""} onChange={(event) => updatePlacement(placement.referenceId, { layoutText: event.target.value })} />
+                        </label>
+                      ) : null}
                       <label className={styles.editorialControlLabel}>
                         CAPTION
                         <input maxLength={500} value={placement.caption} onChange={(event) => updatePlacement(placement.referenceId, { caption: event.target.value })} />
@@ -281,9 +375,34 @@ export function ArticleReviewEditor({
         <div className={styles.editorialPreviewColumn} aria-label="Publication preview">
           <div className={styles.editorialPreviewToolbar}>
             <div><span className={styles.editorialLiveDot} /> LIVE LAYOUT PREVIEW</div>
-            <span>DESKTOP EDITION</span>
+            <span>DESIGN SYSTEM</span>
           </div>
-          <article className={styles.editorialPublication}>
+          <div className={styles.articleDesignControls}>
+            <label>
+              <span>Template</span>
+              <select value={activeDesign.templateId} onChange={(event) => {
+                const templateId = event.target.value as ArticleDesignSettings["templateId"];
+                updateDesign({ templateId, accentColor: getArticleTemplate(templateId).accentColor });
+                const allowed = getArticleTemplate(templateId).allowedMediaLayouts;
+                setMediaPlacements((current) => current.map((placement) =>
+                  placement.layout && !allowed.includes(placement.layout) ? { ...placement, layout: "wide", galleryGroup: "" } : placement,
+                ));
+              }}>
+                {ARTICLE_TEMPLATES.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Accent</span>
+              <input className={styles.articleAccentInput} type="color" value={activeDesign.accentColor} onChange={(event) => updateDesign({ accentColor: event.target.value.toUpperCase() })} />
+            </label>
+            <label>
+              <span>Density</span>
+              <select value={activeDesign.density} onChange={(event) => updateDesign({ density: event.target.value as ArticleDesignSettings["density"] })}>
+                <option value="balanced">Balanced</option><option value="visual-rich">Image-forward</option><option value="quiet">Quiet</option>
+              </select>
+            </label>
+          </div>
+          <article className={styles.editorialPublication} data-template={activeDesign.templateId} data-density={activeDesign.density} style={{ "--article-accent": activeDesign.accentColor } as CSSProperties}>
             <header className={styles.editorialPublicationHeader}>
               <span>THE DAILY EDITION</span>
               <span>ARTICLES <i>✳</i> IDEAS <i>✳</i> CULTURE</span>
