@@ -1,3 +1,4 @@
+
 /* Container used by the real Wix custom element and the isolated dev preview. */
 .widgetContainer {
   box-sizing: border-box;
@@ -193,18 +194,18 @@
   overflow-wrap: anywhere;
 }
 
-/* TABLET: 640px and above */
+/* DESKTOP LAYOUT: 1024px and above */
 
-@container blog-workflow (min-width: 640px) {
+@container blog-workflow (min-width: 1024px) {
   .root {
-    padding: clamp(24px, 2.8cqi, 40px);
-    gap: clamp(20px, 2cqi, 28px);
+    padding: clamp(32px, 3cqi, 56px);
+    gap: 28px;
   }
 
   .workflowTopBar {
     flex-direction: row;
-    align-items: flex-start;
-    gap: 24px;
+    align-items: center;
+    gap: 32px;
   }
 
   .workflowTopBar > button {
@@ -213,7 +214,8 @@
 
   .workflowForm {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
+    gap: 22px;
+    padding: clamp(24px, 2.2cqi, 32px);
   }
 
   /* Keep long-form fields and primary actions on their own row. */
@@ -225,25 +227,6 @@
 
   .workflowForm > button {
     width: fit-content;
-  }
-}
-
-/* DESKTOP: 1024px and above */
-
-@container blog-workflow (min-width: 1024px) {
-  .root {
-    padding: clamp(32px, 3cqi, 56px);
-    gap: 28px;
-  }
-
-  .workflowTopBar {
-    align-items: center;
-    gap: 32px;
-  }
-
-  .workflowForm {
-    gap: 22px;
-    padding: clamp(24px, 2.2cqi, 32px);
   }
 
   .reviewSection {
