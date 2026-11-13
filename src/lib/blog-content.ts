@@ -358,7 +358,7 @@ function mediaRichNode(
 ): RichTextNode {
   const caption = placement?.caption?.trim() || asset.name;
   const altText = placement?.altText?.trim() || asset.name;
-  const containerData = { width: { size: 'CONTENT' }, alignment: 'CENTER' };
+  const containerData = { width: { size: 'CONTENT' }, alignment: 'CENTER' } as const;
 
   if (asset.kind === 'image') {
     return {
