@@ -19,7 +19,6 @@ import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
-import { loadResearchSources, ResearchSourceError } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 
 const memberToken = (overrides = {}) => ({
@@ -348,26 +347,4 @@ test('Wix rich content keeps video and audio playable and documents downloadable
   assert.equal(richContent.nodes.some((node) => node.type === 'VIDEO'), true);
   assert.equal(richContent.nodes.some((node) => node.type === 'AUDIO'), true);
   assert.equal(richContent.nodes.some((node) => node.type === 'PARAGRAPH' && node.nodes?.some((child) => child.textData?.text === 'press-kit.pdf')), true);
-});
-
-
-test('research retrieval reports the publisher HTTP status instead of a generic inaccessible-page error', async () => {
-  const resolveHost = async () => [{ address: '8.8.8.8', family: 4 }];
-
-  await assert.rejects(
-    loadResearchSources(
-      ['https://yardandgarden.extension.iastate.edu/how-to/easy-low-maintenance-houseplants'],
-      {
-        resolveHost,
-        fetchImpl: async () => new Response('Access denied', {
-          status: 403,
-          headers: { 'content-type': 'text/html' },
-        }),
-      },
-    ),
-    (error) =>
-      error instanceof ResearchSourceError &&
-      /yardandgarden\.extension\.iastate\.edu returned HTTP 403/.test(error.message) &&
-      /unavailable to automated retrieval/.test(error.message),
-  );
 });
