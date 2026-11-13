@@ -24,6 +24,19 @@ React components are kept out of Wix registration files. The site widget's custo
 
 Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
 
+## Local UI previews
+
+Run `npm run dev`, then open `/dev` on the local development server. These preview routes are development-only and redirect to the home page outside development:
+
+- `/dev/member-access` — mock sign-in, approved workflow, permission-denied, and access-unavailable screens.
+- `/dev/blog-workflow` — complete workflow, including mock article generation, article editing, and mock draft saving.
+- `/dev/blog-brief` — the brief form in isolation.
+- `/dev/article-review` — the article editor and metadata in isolation.
+
+The preview passes `mode="mock"` to the workflow hook. It does not call the Wix generation or draft API and cannot create a real Wix Blog draft. Use the normal Wix member flow to verify live authorization and Wix integration.
+
+Run the UI-preview suite with `npm run test:preview`. Run it together with the existing runner, authorization, and workflow suites using `npm test`.
+
 ## Wix AI and packages
 
 Generation uses the Wix AI SDK rather than a direct OpenAI API key. Wix handles AI provider authentication and billing for Wix apps. The AI APIs are currently documented as **Developer Preview**, so their behavior and SDK contracts may change.
