@@ -30,6 +30,7 @@ export default function ArticleReviewEditorPreview() {
       ) : null}
       <ArticleReviewEditor
         article={MOCK_GENERATED_ARTICLE}
+        sources={[]}
         isSaving={isSaving}
         draftSaved={draftSaved}
         onSave={handleMockSave}
