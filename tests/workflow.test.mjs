@@ -19,6 +19,7 @@ import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
+import { loadResearchSources } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 
 const memberToken = (overrides = {}) => ({
@@ -347,4 +348,30 @@ test('Wix rich content keeps video and audio playable and documents downloadable
   assert.equal(richContent.nodes.some((node) => node.type === 'VIDEO'), true);
   assert.equal(richContent.nodes.some((node) => node.type === 'AUDIO'), true);
   assert.equal(richContent.nodes.some((node) => node.type === 'PARAGRAPH' && node.nodes?.some((child) => child.textData?.text === 'press-kit.pdf')), true);
+});
+
+
+test('research source requests use standard browser-compatible headers', async () => {
+  let requestHeaders;
+  const html = '<html><head><title>Accessible Houseplant Guide</title></head><body><main><p>This is a sufficiently long public article excerpt for the research importer test.</p></main></body></html>';
+
+  const sources = await loadResearchSources(
+    ['https://public.example.org/houseplants'],
+    {
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async (_url, init) => {
+        requestHeaders = new Headers(init?.headers);
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      },
+      now: () => new Date('2026-11-13T12:00:00.000Z'),
+    },
+  );
+
+  assert.equal(requestHeaders.get('user-agent')?.startsWith('Mozilla/5.0'), true);
+  assert.equal(requestHeaders.get('accept-language'), 'en-US,en;q=0.9');
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].title, 'Accessible Houseplant Guide');
 });
