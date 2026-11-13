@@ -1,30 +1,38 @@
+
 .root {
   box-sizing: border-box;
   display: grid;
-  width: 100%;
-  max-width: 1000px;
-  min-height: 100%;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  margin: 0 auto;
-  padding: 24px;
-  border: 1px solid #d9dfe9;
-  border-radius: 16px;
+
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  margin: 0;
+  padding: clamp(16px, 3vw, 48px);
+  gap: clamp(20px, 2vw, 32px);
+
   background: #f8fafc;
   color: #172033;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Header */
+
 .workflowTopBar {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: clamp(22px, 2vw, 32px);
   line-height: 1.2;
 }
 
@@ -36,10 +44,18 @@
   line-height: 1.6;
 }
 
+/* Forms */
+
 .workflowForm {
+  box-sizing: border-box;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  padding: 20px;
+
+  width: 100%;
+  min-width: 0;
+  padding: clamp(16px, 2vw, 28px);
+
   border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: #ffffff;
@@ -48,14 +64,19 @@
 .workflowInput,
 .workflowTextarea {
   box-sizing: border-box;
+  display: block;
+
   width: 100%;
+  min-width: 0;
+
   border: 1px solid #cdd4df;
   border-radius: 8px;
   padding: 11px 12px;
+
   background: #ffffff;
   color: #172033;
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .workflowInput:focus,
@@ -70,25 +91,36 @@
   line-height: 1.55;
 }
 
+/* Article review */
+
 .reviewSection {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  width: 100%;
+  min-width: 0;
 }
 
 .workflowSectionTitle {
   margin: 0;
   color: #172033;
-  font-size: 19px;
+  font-size: clamp(19px, 1.5vw, 24px);
 }
 
 .metadataCard {
+  box-sizing: border-box;
+  min-width: 0;
   padding: 16px 20px;
+
   border: 1px solid #e1e6ef;
   border-radius: 12px;
+
   background: #ffffff;
   color: #30394a;
   font-size: 13px;
   line-height: 1.55;
+
+  overflow-wrap: anywhere;
 }
 
 .metadataCard p {
@@ -99,6 +131,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
@@ -109,10 +142,62 @@
   padding: 5px 10px;
   background: #edf3ff;
   color: #284e89;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 620px) {
-  .root { padding: 18px; }
-  .workflowTopBar { flex-direction: column; }
-  .workflowForm { padding: 16px; }
+/* TABLET: 640px and above */
+
+@media (min-width: 640px) {
+  .root {
+    padding: clamp(24px, 3vw, 40px);
+  }
+
+  .workflowTopBar {
+    flex-direction: row;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .workflowForm {
+    gap: 20px;
+  }
+}
+
+/* DESKTOP: 1024px and above */
+
+@media (min-width: 1024px) {
+  .root {
+    padding: clamp(32px, 3vw, 56px);
+    gap: 28px;
+  }
+
+  .workflowForm {
+    gap: 22px;
+  }
+
+  .reviewSection {
+    gap: 20px;
+  }
+
+  .metadataCard {
+    padding: 20px 24px;
+  }
+}
+
+/* LARGE DESKTOP: 1440px and above */
+
+@media (min-width: 1440px) {
+  .root {
+    padding: 48px 64px;
+    gap: 32px;
+  }
+
+  .workflowForm {
+    padding: 32px;
+    gap: 24px;
+  }
+
+  .reviewSection {
+    gap: 24px;
+  }
 }
