@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { httpClient } from '@wix/essentials';
 import type { GeneratedArticle } from '../blog-content';
+import { createMockDraft, generateMockArticle } from '../dev/mock-blog-workflow';
 
 const API_BASE_URL = new URL(import.meta.url).origin;
 
@@ -23,6 +24,7 @@ type DraftInput = {
 };
 
 type ApiError = { error?: string };
+type WorkflowMode = 'live' | 'mock';
 
 async function postWorkflowJson<T>(path: string, payload: unknown): Promise<T> {
   const response = await httpClient.fetchWithAuth(API_BASE_URL + path, {
@@ -59,7 +61,7 @@ function isGeneratedArticle(value: unknown): value is GeneratedArticle {
   );
 }
 
-export function useBlogWorkflow() {
+export function useBlogWorkflow({ mode = 'live' }: { mode?: WorkflowMode } = {}) {
   const [article, setArticle] = useState<GeneratedArticle | null>(null);
   const [notice, setNotice] = useState<WorkflowNotice | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -72,9 +74,19 @@ export function useBlogWorkflow() {
     setArticle(null);
     setDraftSaved(false);
     submissionId.current = null;
-    setNotice({ message: 'Generating a structured article…', tone: 'info' });
+    setNotice({ message: mode === 'mock' ? 'Generating a sample article…' : 'Generating a structured article…', tone: 'info' });
 
     try {
+      if (mode === 'mock') {
+        const mockArticle = await generateMockArticle(brief);
+        setArticle(mockArticle);
+        setNotice({
+          message: 'Mock article generated. Review and edit it before simulating an unpublished draft save.',
+          tone: 'success',
+        });
+        return;
+      }
+
       const result = await postWorkflowJson<{ article?: unknown }>(
         '/api/workflow/generate',
         brief,
@@ -97,16 +109,29 @@ export function useBlogWorkflow() {
     } finally {
       setIsGenerating(false);
     }
-  }, []);
+  }, [mode]);
 
   const createDraft = useCallback(async ({ title, body }: DraftInput): Promise<void> => {
     if (!article || draftSaved) return;
 
     setIsSaving(true);
-    setNotice({ message: 'Checking Wix Blog and saving the unpublished draft…', tone: 'info' });
-    submissionId.current ??= crypto.randomUUID();
+    setNotice({
+      message: mode === 'mock' ? 'Simulating unpublished draft creation…' : 'Checking Wix Blog and saving the unpublished draft…',
+      tone: 'info',
+    });
 
     try {
+      if (mode === 'mock') {
+        const draft = await createMockDraft({ title, body });
+        setDraftSaved(true);
+        setNotice({
+          message: 'Mock draft saved (' + draft.draftId + '). No Wix Blog draft was created.',
+          tone: 'success',
+        });
+        return;
+      }
+
+      submissionId.current ??= crypto.randomUUID();
       const result = await postWorkflowJson<{
         draft?: { draftId?: unknown; status?: unknown };
       }>('/api/workflow/drafts', {
@@ -141,7 +166,7 @@ export function useBlogWorkflow() {
     } finally {
       setIsSaving(false);
     }
-  }, [article, draftSaved]);
+  }, [article, draftSaved, mode]);
 
   return {
     article,

@@ -1,10 +1,10 @@
 import { BlogWorkflow } from '../blog/BlogWorkflow';
 
 export default function BlogWorkflowPreview() {
-  // Authentication is intentionally disabled in this UI preview.
+  // Authentication is intentionally disabled in this isolated preview.
   const handleSignOut = async (): Promise<void> => {
-    console.info('Sign-out is disabled in the standalone preview.');
+    console.info('Sign-out is disabled in the isolated workflow preview.');
   };
 
-  return <BlogWorkflow onSignOut={handleSignOut} />;
+  return <BlogWorkflow mode="mock" onSignOut={handleSignOut} />;
 }

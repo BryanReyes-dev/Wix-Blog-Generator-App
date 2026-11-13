@@ -8,9 +8,10 @@ import styles from './BlogWorkflow.module.css';
 
 type BlogWorkflowProps = {
   onSignOut: () => Promise<void>;
+  mode?: 'live' | 'mock';
 };
 
-export function BlogWorkflow({ onSignOut }: BlogWorkflowProps) {
+export function BlogWorkflow({ onSignOut, mode = 'live' }: BlogWorkflowProps) {
   const {
     article,
     notice,
@@ -19,7 +20,7 @@ export function BlogWorkflow({ onSignOut }: BlogWorkflowProps) {
     draftSaved,
     generateArticle,
     createDraft,
-  } = useBlogWorkflow();
+  } = useBlogWorkflow({ mode });
   const [signOutError, setSignOutError] = useState('');
 
   const handleSignOut = async () => {
@@ -44,6 +45,14 @@ export function BlogWorkflow({ onSignOut }: BlogWorkflowProps) {
           Sign out
         </ActionButton>
       </header>
+
+      {mode === 'mock' ? (
+        <StatusPanel
+          title="Development mock mode"
+          message="Generation and draft saving are simulated. No Wix AI request is sent and no Wix Blog draft is created."
+          tone="info"
+        />
+      ) : null}
 
       {signOutError ? (
         <StatusPanel title="Sign-out failed" message={signOutError} tone="error" />
