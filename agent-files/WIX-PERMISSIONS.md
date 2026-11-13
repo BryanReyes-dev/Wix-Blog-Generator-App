@@ -8,6 +8,7 @@ Request only the scopes needed by the current implementation:
 
 | Scope | Purpose |
 | --- | --- |
+| `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — Invoke AI Models | Required for article generation through the Wix-managed `@wix/ai` provider. Wix handles provider authentication and AI usage billing. |
 | `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create a Wix Blog draft. The request explicitly sends `publish: false`. |
 | `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` — Manage Media Manager | Generate signed direct and resumable upload URLs so approved members can upload original article media. |
 | `SCOPE.DC-MEDIA.READ-MEDIAMANAGER` — Read Media Manager | Verify uploaded files, media types, processing state, and URLs before adding them to the Blog draft. |
@@ -37,23 +38,24 @@ Member workflow endpoints require an active `MEMBER` token and a successful appr
 
 On an already-installed app, changes to a data collection extension or new app scopes require the appropriate Wix app version/update and site approval before they work on the development site. This code change does not release the app or alter site settings.
 
-## OpenAI configuration
+## Wix AI configuration
 
-The Wix AI Credits integration only exposes `aiCredits.getBalance()` in the installed SDK; it does not generate content. Article generation uses OpenAI's Responses API from the server with Structured Outputs.
+Article generation uses the Wix-managed `@wix/ai` provider with the Vercel AI SDK. It does not call OpenAI directly and does not require an `OPENAI_API_KEY`.
 
-- `OPENAI_API_KEY`: required secret server variable.
-- `OPENAI_MODEL`: optional server variable; defaults to `gpt-5.4-mini`.
+- Required app scope: `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — **Invoke AI Models**.
+- Optional server variable: `WIX_AI_MODEL`; the app defaults to `gpt-5-mini`.
+- Wix AI APIs are documented as Developer Preview. Confirm that the installing Wix user can access AI model usage and that the model ID is supported by Wix.
 
-Store the key with `wix env set --key OPENAI_API_KEY --value <your-key>`. For local development, `wix env pull` places Wix variables into `.env.local`, which is ignored by Git. `.env.example` lists the names without credentials. Do not use a `PUBLIC_` prefix.
+Use `wix env set` only when changing the optional `WIX_AI_MODEL` setting. Do not add an OpenAI API key for this Wix-managed integration. For local development, `wix env pull` refreshes the project's Wix environment variables into `.env.local`.
 
 ## Development-site setup still required
 
 Before live verification:
 
 1. Add the Wix Blog required product in Developer Center.
-2. Add the Wix permissions listed above, including Manage Media Manager and Read Media Manager, and approve the app update on an isolated development site.
+2. Add all Wix permissions listed above, especially Invoke AI Models, Manage Media Manager, and Read Media Manager; then approve the app update on the development site.
 3. Install Wix Blog on that development site and ensure the app-owned `WorkflowAccess` collection is provisioned with `PRIVILEGED` permissions.
-4. Set `OPENAI_API_KEY` and, if desired, `OPENAI_MODEL` as server variables.
+4. Confirm the installing Wix user has AI model availability; optionally set `WIX_AI_MODEL` to a model ID supported by Wix.
 5. Place the member widget on `/admin`, `/admin/workflow`, and `/admin/permission-denied`. On `/admin/workflow`, stretch it wide and increase its height to show the brief and review fields; existing placements may retain their previous dimensions.
 6. Run `wix dev` and follow the manual sign-off cases in [ADMIN-AUTH-FLOW.md](./ADMIN-AUTH-FLOW.md).
 
