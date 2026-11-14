@@ -8,7 +8,7 @@ import {
 } from '../blog-content.ts';
 import type { ResearchSource } from './research-sources';
 import type { MediaReference } from './media-references';
-import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from '../article-layout';
+import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from '../article-layout.ts';
 
 export class AiProviderError extends Error {
   public readonly status: number;

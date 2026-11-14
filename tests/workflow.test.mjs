@@ -297,6 +297,9 @@ test('article media references receive one validated editorial placement each', 
     afterParagraph: 1,
     caption: 'A close look at the finished product.',
     altText: 'Finished product on a wooden table.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
   }]);
 
   assert.throws(() => parseGeneratedArticle({

@@ -1,4 +1,4 @@
-import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, parseArticleDesign, type ArticleDesignSettings, type ArticleSectionLayout } from "./article-layout";
+import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, parseArticleDesign, type ArticleDesignSettings, type ArticleSectionLayout } from "./article-layout.ts";
 export const BLOG_TITLE_MAX_LENGTH = 200;
 export const BLOG_EXCERPT_MAX_LENGTH = 500;
 export const BLOG_BODY_MAX_LENGTH = 30_000;
