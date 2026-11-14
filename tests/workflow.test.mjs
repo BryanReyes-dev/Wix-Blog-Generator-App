@@ -18,6 +18,10 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
+import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
+import { loadResearchSources } from '../src/lib/server/research-sources.ts';
+import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
+import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -47,8 +51,8 @@ const validArticle = () => ({
   title: 'A Practical Guide to Better Sleep',
   introduction: 'Small habits can make bedtime more consistent.',
   sections: [
-    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.' },
-    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.' },
+    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.', layout: 'standard' },
+    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.', layout: 'standard' },
   ],
   conclusion: 'Start with one change and keep it manageable.',
   metaDescription: 'Simple ways to build a calmer, more consistent sleep routine.',
@@ -205,6 +209,33 @@ test('Wix AI generation uses the managed provider and parses the article JSON', 
   assert.deepEqual(result, validArticle());
 });
 
+test('Wix AI structured-output schema requires mediaPlacements even when no media is attached', async () => {
+  const brief = {
+    topic: 'small-apartment houseplants',
+    audience: 'first-time plant owners',
+    tone: 'friendly and practical',
+    instructions: 'Explain easy plant care for small homes.',
+    seoKeywords: ['low-maintenance houseplants'],
+  };
+  let capturedSchema;
+  let capturedSystem = '';
+
+  const result = await generateBlogArticle(brief, {
+    model: 'gpt-5-mini',
+    generateStructuredOutput: async ({ schema, system }) => {
+      capturedSchema = schema;
+      capturedSystem = system;
+      return { output: { ...validArticle(), mediaPlacements: [] } };
+    },
+  });
+
+  assert.ok(capturedSchema);
+  assert.equal(capturedSchema.safeParse(validArticle()).success, false);
+  assert.equal(capturedSchema.safeParse({ ...validArticle(), mediaPlacements: [] }).success, true);
+  assert.match(capturedSystem, /Always include mediaPlacements as an array/);
+  assert.deepEqual(result, validArticle());
+});
+
 test('Wix AI generation rejects empty model configuration and malformed output', async () => {
   const brief = {
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
@@ -244,4 +275,246 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
     }),
     (error) => error instanceof AiProviderError && error.status === 503 && /Invoke AI Models/.test(error.message),
   );
+});
+
+
+test('article media references receive one validated editorial placement each', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A close look at the finished product.',
+      altText: 'Finished product on a wooden table.',
+    }],
+  }, [{ id: referenceId, name: 'product.png' }]);
+
+  assert.deepEqual(article.mediaPlacements, [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 1,
+    caption: 'A close look at the finished product.',
+    altText: 'Finished product on a wooden table.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
+  }]);
+
+  assert.throws(() => parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{ referenceId: 'unknown-reference', sectionIndex: 0, afterParagraph: 0 }],
+  }, [{ id: referenceId, name: 'product.png' }]), InputValidationError);
+});
+
+test('Wix Rich Content inserts the original uploaded image at its reviewed placement', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const body = '## Introduction\\n\\nAn opening paragraph.\\n\\n## Build a steady routine\\n\\nA section paragraph.\\n\\n## Make the room comfortable\\n\\nAnother paragraph.\\n\\n## Conclusion\\n\\nA closing paragraph.';
+  const richContent = bodyToRichContent(body, [], [{
+    referenceId,
+    fileId: 'site_image_file_id~mv2.png',
+    name: 'room.png',
+    kind: 'image',
+    fileUrl: 'https://static.wixstatic.com/media/site_image_file_id~mv2.png',
+    width: 1200,
+    height: 800,
+  }], [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 0,
+    caption: 'A quiet reading corner.',
+    altText: 'A chair beside a lamp and bookshelf.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
+  }]);
+
+  const imageNode = richContent.nodes.find((node) => node.type === 'IMAGE');
+  assert.ok(imageNode);
+  assert.equal(imageNode.imageData.image.src.id, 'site_image_file_id~mv2.png');
+  assert.equal(imageNode.imageData.altText, 'A chair beside a lamp and bookshelf.');
+  assert.equal(imageNode.nodes[0].type, 'CAPTION');
+});
+
+test('media input validation recognizes image, video, audio, and downloadable document types', () => {
+  assert.equal(getMediaFileInfo('cover.PNG')?.kind, 'image');
+  assert.equal(getMediaFileInfo('launch.MOV')?.kind, 'video');
+  assert.equal(getMediaFileInfo('interview.mp3')?.kind, 'audio');
+  assert.equal(getMediaFileInfo('press-kit.PDF')?.kind, 'document');
+  assert.equal(getMediaFileInfo('unknown.exe'), null);
+
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const references = parseMediaReferences([{
+    id: referenceId,
+    name: 'interview.mp3',
+    kind: 'audio',
+    notes: '',
+    frames: [],
+  }]);
+  assert.equal(references[0].kind, 'audio');
+
+  const uploads = parseDraftMediaInputs([{
+    referenceId,
+    fileId: 'site_audio_file_id',
+    name: 'interview.mp3',
+    kind: 'audio',
+    mimeType: 'audio/mpeg',
+  }]);
+  assert.equal(uploads[0].fileId, 'site_audio_file_id');
+});
+
+
+test('Wix rich content keeps video and audio playable and documents downloadable', () => {
+  const references = [
+    { referenceId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357', fileId: 'site_video_file_id', name: 'launch.mp4', kind: 'video', fileUrl: 'https://video.wixstatic.com/video/site_video_file_id/file', videoMediaId: 'video/site_video_file_id/1080p/mp4/file.mp4', durationSeconds: 42 },
+    { referenceId: 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358', fileId: 'site_audio_file_id', name: 'interview.mp3', kind: 'audio', fileUrl: 'https://static.wixstatic.com/media/site_audio_file_id' },
+    { referenceId: 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359', fileId: 'site_pdf_file_id', name: 'press-kit.pdf', kind: 'document', fileUrl: 'https://static.wixstatic.com/media/site_pdf_file_id' },
+  ];
+  const placements = references.map((reference, index) => ({
+    referenceId: reference.referenceId,
+    sectionIndex: -1,
+    afterParagraph: index,
+    caption: reference.name,
+    altText: reference.name,
+  }));
+  const richContent = bodyToRichContent('## Introduction\\n\\nOpening paragraph.', [], references, placements);
+  assert.equal(richContent.nodes.some((node) => node.type === 'VIDEO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'AUDIO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'PARAGRAPH' && node.nodes?.some((child) => child.textData?.text === 'press-kit.pdf')), true);
+});
+
+
+test('research source requests use standard browser-compatible headers', async () => {
+  let requestHeaders;
+  const html = '<html><head><title>Accessible Houseplant Guide</title></head><body><main><p>This is a sufficiently long public article excerpt for the research importer test.</p></main></body></html>';
+
+  const sources = await loadResearchSources(
+    ['https://public.example.org/houseplants'],
+    {
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async (_url, init) => {
+        requestHeaders = new Headers(init?.headers);
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      },
+      now: () => new Date('2026-11-13T12:00:00.000Z'),
+    },
+  );
+
+  assert.equal(requestHeaders.get('user-agent')?.startsWith('Mozilla/5.0'), true);
+  assert.equal(requestHeaders.get('accept-language'), 'en-US,en;q=0.9');
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].title, 'Accessible Houseplant Guide');
+});
+
+
+test('article design presets validate template, color, and visual density', () => {
+  assert.equal(ARTICLE_TEMPLATES.length, 3);
+  assert.deepEqual(parseArticleDesign(undefined), DEFAULT_ARTICLE_DESIGN);
+  assert.deepEqual(parseArticleDesign({
+    templateId: 'visual',
+    accentColor: '#b84b32',
+    density: 'visual-rich',
+  }), {
+    templateId: 'visual',
+    accentColor: '#B84B32',
+    density: 'visual-rich',
+  });
+  assert.throws(() => parseArticleDesign({ templateId: 'custom-css', accentColor: '#fff', density: 'balanced' }));
+  assert.throws(() => parseArticleDesign({ templateId: 'editorial', accentColor: 'red', density: 'balanced' }));
+});
+
+test('generated media layout is constrained by the selected template', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A useful visual note.',
+      altText: 'A potted plant beside a window.',
+      layout: 'gallery',
+      galleryGroup: 'plants-gallery',
+      layoutText: '',
+    }],
+  }, [{ id: referenceId, name: 'plant.png', kind: 'image' }], {
+    templateId: 'minimal',
+    accentColor: '#465366',
+    density: 'quiet',
+  });
+  assert.equal(article.mediaPlacements?.[0]?.layout, 'wide');
+  assert.equal(article.mediaPlacements?.[0]?.galleryGroup, '');
+});
+
+test('Wix Rich Content renders paired images as a gallery and split images as tables', () => {
+  const firstId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const secondId = 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358';
+  const thirdId = 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359';
+  const body = '## Introduction\n\nOpening paragraph.\n\n## Plant choices\n\nA section paragraph.';
+  const assets = [
+    { referenceId: firstId, fileId: 'site_image_one', name: 'plant-one.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_one', width: 1200, height: 900 },
+    { referenceId: secondId, fileId: 'site_image_two', name: 'plant-two.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_two', width: 1200, height: 900 },
+    { referenceId: thirdId, fileId: 'site_image_three', name: 'plant-three.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_three', width: 1200, height: 900 },
+  ];
+  const richContent = bodyToRichContent(body, [], assets, [
+    { referenceId: firstId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant one', altText: 'Plant one', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: secondId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant two', altText: 'Plant two', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: thirdId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant three', altText: 'Plant three', layout: 'split-right', galleryGroup: '', layoutText: 'An easy-care choice for a bright corner.' },
+  ]);
+  const gallery = richContent.nodes.find((node) => node.type === 'GALLERY');
+  const split = richContent.nodes.find((node) => node.type === 'TABLE');
+  assert.ok(gallery);
+  assert.equal(gallery.galleryData.items.length, 2);
+  assert.ok(split);
+  assert.equal(split.nodes[0].nodes.length, 2);
+});
+
+
+test('generated article section patterns are constrained by the selected template', () => {
+  const generated = {
+    ...validArticle(),
+    sections: [
+      { heading: 'A useful warning', body: 'Avoid overwatering the plant.', layout: 'callout' },
+      { heading: 'A simple routine', body: 'Check the soil.\n\nWater only when needed.', layout: 'steps' },
+    ],
+  };
+  const editorial = parseGeneratedArticle(generated, [], {
+    templateId: 'editorial', accentColor: '#8A6E4B', density: 'balanced',
+  });
+  assert.deepEqual(editorial.sections.map((section) => section.layout), ['callout', 'steps']);
+
+  const minimal = parseGeneratedArticle(generated, [], {
+    templateId: 'minimal', accentColor: '#465366', density: 'quiet',
+  });
+  assert.deepEqual(minimal.sections.map((section) => section.layout), ['callout', 'standard']);
+});
+
+test('Wix Rich Content serializes callout and step section patterns', () => {
+  const body = '## Introduction\n\nOpening paragraph.\n\n## A useful warning\n\nAvoid overwatering the plant.\n\n## A simple routine\n\nCheck the soil first.\n\nWater only when needed.';
+  const richContent = bodyToRichContent(body, [], [], [], ['callout', 'steps']);
+  const callout = richContent.nodes.find((node) => node.type === 'BLOCKQUOTE');
+  const steps = richContent.nodes.find((node) => node.type === 'ORDERED_LIST');
+  assert.ok(callout);
+  assert.equal(callout.nodes[0].type, 'PARAGRAPH');
+  assert.ok(steps);
+  assert.equal(steps.nodes.length, 2);
+  assert.equal(steps.nodes[0].type, 'LIST_ITEM');
+});
+
+test('draft submission carries validated article design and section patterns', () => {
+  const submission = parseDraftSubmission({
+    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
+    title: validArticle().title,
+    body: '## Introduction\n\nOpening.\n\n## A section\n\nBody.',
+    metaDescription: validArticle().metaDescription,
+    seoKeywords: validArticle().seoKeywords,
+    design: { templateId: 'visual', accentColor: '#B84B32', density: 'visual-rich' },
+    sectionLayouts: ['steps'],
+  });
+  assert.equal(submission.design.templateId, 'visual');
+  assert.deepEqual(submission.sectionLayouts, ['steps']);
 });
