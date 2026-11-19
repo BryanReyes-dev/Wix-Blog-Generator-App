@@ -3,17 +3,21 @@
   display: grid;
   gap: 10px;
   width: 100%;
-  padding: 22px;
+  min-width: 0;
+  max-width: 100%;
+  padding: clamp(16px, 2.2cqi, 24px);
   border: 1px solid #d9dfe9;
   border-radius: 14px;
   background: #ffffff;
   color: #172033;
+  overflow-wrap: anywhere;
 }
 
 .title {
   margin: 0;
-  font-size: 20px;
+  font-size: clamp(18px, 1.8cqi, 20px);
   line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .message {
@@ -21,6 +25,7 @@
   color: #5c6472;
   font-size: 14px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .actions {
@@ -28,6 +33,10 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
+}
+
+.actions > * {
+  max-width: 100%;
 }
 
 .error {

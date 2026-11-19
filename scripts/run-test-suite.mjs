@@ -3,10 +3,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const TEST_SUITES = Object.freeze({
-  all: Object.freeze(["runner", "auth", "workflow"]),
+  all: Object.freeze(["runner", "auth", "workflow", "preview"]),
   runner: Object.freeze(["runner"]),
   auth: Object.freeze(["auth"]),
   workflow: Object.freeze(["workflow"]),
+  preview: Object.freeze(["preview"]),
 });
 
 function commandFor(name, nodePath) {
@@ -30,15 +31,16 @@ function commandFor(name, nodePath) {
           "tests/workflow.test.mjs",
         ],
       };
+    case "preview":
+      return {
+        command: "vp",
+        args: ["test", "run", "tests/dev-preview.test.ts"],
+      };
     default:
       throw new Error(`Unrecognized test name: ${name}`);
   }
 }
 
-/**
- * Run one named test suite. Dependencies are injectable so suite dispatch and
- * failure handling can be tested without launching the real test processes.
- */
 export async function runTestSuite(
   selected = "all",
   {
@@ -76,9 +78,6 @@ export async function runTestSuite(
 
       let child;
       try {
-        // Node is an executable and should be spawned directly. On Windows,
-        // only "vp" needs a shell because its package-manager command is a
-        // .cmd shim that cmd.exe must resolve.
         const useWindowsShell = platform === "win32" && command === "vp";
         child = spawnCommand(command, args, {
           env,

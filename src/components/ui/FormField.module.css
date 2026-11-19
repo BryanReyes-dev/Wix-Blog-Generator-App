@@ -1,5 +1,7 @@
 .field {
   display: grid;
+  width: 100%;
+  min-width: 0;
   gap: 7px;
 }
 
@@ -7,10 +9,12 @@
   color: #222b3a;
   font-size: 13px;
   font-weight: 650;
+  overflow-wrap: anywhere;
 }
 
 .hint {
   color: #667085;
   font-size: 12px;
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }

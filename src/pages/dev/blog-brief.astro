@@ -1,0 +1,27 @@
+---
+import BlogBriefFormPreview from '../../components/dev/BlogBriefFormPreview';
+
+if (!import.meta.env.DEV) {
+  return Astro.redirect('/');
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Blog Brief Form Preview</title>
+  </head>
+  <body>
+    <p class="back"><a href="/dev">← All previews</a></p>
+    <BlogBriefFormPreview client:load />
+  </body>
+</html>
+
+<style is:global>
+  html, body { margin: 0; min-height: 100%; }
+  body { box-sizing: border-box; padding: 24px; background: #eef2f7; font-family: ui-sans-serif, system-ui, sans-serif; }
+  .back { width: min(100%, 1000px); margin: 0 auto 18px; }
+  .back a { color: #315c9b; text-decoration: none; font-size: 14px; }
+</style>

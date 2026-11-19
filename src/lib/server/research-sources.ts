@@ -1,4 +1,4 @@
-import type { GeneratedArticle } from './blog-content';
+import type { GeneratedArticle } from '../blog-content';
 
 export const MAX_RESEARCH_SOURCES = 5;
 export const MAX_RESEARCH_URL_LENGTH = 2_048;
@@ -419,7 +419,8 @@ async function fetchResearchPage(
         method: 'GET',
         headers: {
           Accept: 'text/html, text/plain;q=0.9',
-          'User-Agent': 'WixBlogGeneratorResearch/1.0 (+public-webpage import)',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
         },
         redirect: 'manual',
         signal: AbortSignal.timeout(config.timeoutMs),

@@ -43,10 +43,11 @@ function makeOutput() {
 }
 
 test("named suites contain the expected tests without duplicates", () => {
-  assert.deepEqual(TEST_SUITES.all, ["runner", "auth", "workflow"]);
+  assert.deepEqual(TEST_SUITES.all, ["runner", "auth", "workflow", "preview"]);
   assert.deepEqual(TEST_SUITES.runner, ["runner"]);
   assert.deepEqual(TEST_SUITES.auth, ["auth"]);
   assert.deepEqual(TEST_SUITES.workflow, ["workflow"]);
+  assert.deepEqual(TEST_SUITES.preview, ["preview"]);
   assert.equal(new Set(TEST_SUITES.all).size, TEST_SUITES.all.length);
 });
 
@@ -59,12 +60,13 @@ test("unknown suite names fail with exit code 2 without spawning a process", asy
 
   assert.equal(result, 2);
   assert.match(output.stderr.join(""), /Unknown test suite: not-a-suite/);
-  assert.match(output.stderr.join(""), /Available suites: all, runner, auth, workflow/);
+  assert.match(output.stderr.join(""), /Available suites: all, runner, auth, workflow, preview/);
 });
 
-test("the all suite runs runner, auth, and workflow tests in order", async () => {
+test("the all suite runs runner, auth, workflow, and preview tests in order", async () => {
   const output = makeOutput();
   const { calls, spawnCommand } = makeSpawn([
+    { code: 0 },
     { code: 0 },
     { code: 0 },
     { code: 0 },
@@ -97,12 +99,16 @@ test("the all suite runs runner, auth, and workflow tests in order", async () =>
           "tests/workflow.test.mjs",
         ],
       },
+      {
+        command: "vp",
+        args: ["test", "run", "tests/dev-preview.test.ts"],
+      },
     ],
   );
   assert.deepEqual(
 <<<<<<< HEAD
     calls.map((call) => call.options.shell),
-    [false, true, false],
+    [false, true, false, true],
   );
 =======
   calls.map((call) => call.options.shell),
@@ -135,6 +141,7 @@ test("a failing suite returns its exit code and prevents later suites from runni
 test("a child-process start error fails closed and stops the suite", async () => {
   const output = makeOutput();
   const { calls, spawnCommand } = makeSpawn([
+    { code: 0 },
     { error: new Error("simulated process start failure") },
     { code: 0 },
   ]);
@@ -146,10 +153,10 @@ test("a child-process start error fails closed and stops the suite", async () =>
   });
 
   assert.equal(result, 1);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.match(
     output.stderr.join(""),
-    /Unable to start runner tests: simulated process start failure/,
+    /Unable to start auth tests: simulated process start failure/,
   );
 });
 
@@ -181,7 +188,7 @@ test("the CLI entrypoint reports invalid suite names with exit code 2", () => {
   assert.equal(result.error, undefined);
   assert.equal(result.status, 2);
   assert.match(result.stderr, /Unknown test suite: not-a-suite/);
-  assert.match(result.stderr, /Available suites: all, runner, auth, workflow/);
+  assert.match(result.stderr, /Available suites: all, runner, auth, workflow, preview/);
 });
 
 test("prototype property names are rejected as unknown suites", async () => {

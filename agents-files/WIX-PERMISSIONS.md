@@ -8,10 +8,10 @@ Request only the scopes needed by the current implementation:
 
 | Scope | Purpose |
 | --- | --- |
+| `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — Invoke AI Models | Required for article generation through the Wix-managed `@wix/ai` provider. Wix handles provider authentication and AI usage billing. |
 | `SCOPE.DC-BLOG.MANAGE-BLOG` — Manage Blog | Create a Wix Blog draft. The request explicitly sends `publish: false`. |
-| `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` — Manage Media Manager | Generate signed upload URLs and upload original article images and GIFs. |
-| `SCOPE.DC-MEDIA.READ-MEDIAMANAGER` — Read Media Manager | Verify media descriptors, upload ownership, public state, and processing readiness. |
-| `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — Invoke AI Models | Generate article content through the Wix-managed `@wix/ai` integration. |
+| `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER` — Manage Media Manager | Generate signed direct and resumable upload URLs so approved members can upload original article media. |
+| `SCOPE.DC-MEDIA.READ-MEDIAMANAGER` — Read Media Manager | Verify uploaded files, media types, processing state, and URLs before adding them to the Blog draft. |
 | `SCOPE.DC.MANAGE-YOUR-APP` — Manage Your App | Call `appInstances.getAppInstance()` as the app and verify Wix Blog's installed app ID. |
 | `SCOPE.DC-MEMBERS.READ-MEMBERS` — Read Members | Read the live member directory for the dashboard. Calls are made without elevation, so Wix also evaluates the dashboard user's role. |
 | `SCOPE.PROMOTE.MANAGE-SEO` — Manage SEO Settings | Keep the existing AI Credits balance inspection working. It does not generate content. |
@@ -26,7 +26,9 @@ In Wix Developer Center, add **Wix Blog** in **App Profile → App Audience → 
 
 At draft submission time, the backend calls `appInstances.getAppInstance()` and checks `site.installedWixApps` for Wix Blog app ID `14bcded7-0066-7c35-14d7-466cb3f09103`. That identifier was verified from the connected Wix site app context. If the list is missing, Blog is absent, or the `Manage Your App` call fails, the endpoint stops before `createDraftPost` and returns an actionable error.
 
-The creation path uses `draftPosts.createDraftPost()` from `@wix/blog`, sends the verified site-member ID as the required third-party `memberId`, and passes `{ publish: false }`. Only a returned `UNPUBLISHED` status is reported as success. The app has no publish call.
+Original media is uploaded to Wix Media Manager through `@wix/media`. Files up to 10 MB use a signed direct upload URL; larger files use Wix's resumable TUS upload URL. The server re-reads each uploaded descriptor, verifies its Wix media type and public URL, and waits for `operationStatus === 'READY'` before composing the draft. Upload URL generation requires Manage Media Manager; descriptor verification requires Read Media Manager.
+
+The creation path uses `draftPosts.createDraftPost()` from `@wix/blog`, sends the verified site-member ID as the required third-party `memberId`, and passes `{ publish: false }`. Original images are inserted as IMAGE blocks, videos as VIDEO blocks, audio as AUDIO blocks, and document/archive assets as downloadable links. Only a returned `UNPUBLISHED` status is reported as success. The app has no publish call.
 
 ## Approval collection and authorization
 
@@ -40,24 +42,22 @@ On an already-installed app, changes to a data collection extension or new app s
 
 ## Wix AI configuration
 
-Article generation uses the Wix-managed AI provider from `@wix/ai` with the Vercel AI SDK. The separate AI Credits integration exposes the existing credit-balance inspection; it is not the article-generation implementation.
+Article generation uses the Wix-managed `@wix/ai` provider with the Vercel AI SDK. It does not call OpenAI directly and does not require an `OPENAI_API_KEY`.
 
-- `WIX_AI_MODEL`: optional server-side setting; defaults to `gpt-5-mini`. Choose a model supported by the current Wix AI SDK.
-- `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS`: required Wix permission for invoking the managed AI model.
-- A standalone `OPENAI_API_KEY` is not required by the current implementation.
+- Required app scope: `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS` — **Invoke AI Models**.
+- Optional server variable: `WIX_AI_MODEL`; the app defaults to `gpt-5-mini`.
+- Wix AI APIs are documented as Developer Preview. Confirm that the installing Wix user can access AI model usage and that the model ID is supported by Wix.
 
-Use Wix CLI environment commands to configure server-side variables, for example `wix env set --key WIX_AI_MODEL --value <supported-model-id>`. Use `wix env pull` for local development when needed; local environment files must remain ignored by Git. Never expose server variables through a `PUBLIC_` prefix.
-
-Wix's AI API and provider behavior may be Developer Preview. Verify the current API docs and the actual development-site permissions/credit behavior instead of assuming that a displayed balance proves which wallet a generation request consumes.
+Use `wix env set` only when changing the optional `WIX_AI_MODEL` setting. Do not add an OpenAI API key for this Wix-managed integration. For local development, `wix env pull` refreshes the project's Wix environment variables into `.env.local`.
 
 ## Development-site setup still required
 
 Before live verification:
 
 1. Add the Wix Blog required product in Developer Center.
-2. Add the Wix permissions listed above and approve the app update on an isolated development site.
+2. Add all Wix permissions listed above, especially Invoke AI Models, Manage Media Manager, and Read Media Manager; then approve the app update on the development site.
 3. Install Wix Blog on that development site and ensure the app-owned `WorkflowAccess` collection is provisioned with `PRIVILEGED` permissions.
-4. Set `WIX_AI_MODEL` if a non-default model is needed. The current implementation does not require a separate provider API key.
+4. Confirm the installing Wix user has AI model availability; optionally set `WIX_AI_MODEL` to a model ID supported by Wix.
 5. Place the member widget on `/admin`, `/admin/workflow`, and `/admin/permission-denied`. On `/admin/workflow`, stretch it wide and increase its height to show the brief and review fields; existing placements may retain their previous dimensions.
 6. Run `wix dev` and follow the manual sign-off cases in [ADMIN-AUTH-FLOW.md](./ADMIN-AUTH-FLOW.md).
 

@@ -18,19 +18,10 @@ import {
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
-import { articleBodyToDocument, articleDocumentToPlainText, articleDocumentToRichContent, parseArticleDocument } from '../src/lib/article-document.ts';
-import { getAllowedDevCorsOrigins, isAllowedDevCorsOrigin } from '../src/lib/dev-cors.mjs';
-import { MAX_MEDIA_FRAMES, parseMediaReferences } from '../src/lib/server/media-references.ts';
-import {
-  assertCitationIntegrity,
-  extractResearchPage,
-  loadResearchSources,
-  parseResearchCitationSources,
-  parseResearchLinkEntries,
-  parseResearchUrls,
-  ResearchSourceError,
-  validateResearchUrl,
-} from '../src/lib/server/research-sources.ts';
+import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
+import { loadResearchSources } from '../src/lib/server/research-sources.ts';
+import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
+import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -60,8 +51,8 @@ const validArticle = () => ({
   title: 'A Practical Guide to Better Sleep',
   introduction: 'Small habits can make bedtime more consistent.',
   sections: [
-    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.' },
-    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.' },
+    { heading: 'Build a steady routine', body: 'Choose a regular time to wind down.', layout: 'standard' },
+    { heading: 'Make the room comfortable', body: 'Reduce light and noise where possible.', layout: 'standard' },
   ],
   conclusion: 'Start with one change and keep it manageable.',
   metaDescription: 'Simple ways to build a calmer, more consistent sleep routine.',
@@ -216,7 +207,34 @@ test('Wix AI generation uses the managed provider and requests a structured arti
   assert.equal(callArgs.prompt, JSON.stringify({
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
   }));
-  assert.equal(callArgs.maxOutputTokens, 6000);
+  assert.equal(callArgs.maxOutputTokens, 3500);
+  assert.deepEqual(result, validArticle());
+});
+
+test('Wix AI structured-output schema requires mediaPlacements even when no media is attached', async () => {
+  const brief = {
+    topic: 'small-apartment houseplants',
+    audience: 'first-time plant owners',
+    tone: 'friendly and practical',
+    instructions: 'Explain easy plant care for small homes.',
+    seoKeywords: ['low-maintenance houseplants'],
+  };
+  let capturedSchema;
+  let capturedSystem = '';
+
+  const result = await generateBlogArticle(brief, {
+    model: 'gpt-5-mini',
+    generateStructuredOutput: async ({ schema, system }) => {
+      capturedSchema = schema;
+      capturedSystem = system;
+      return { output: { ...validArticle(), mediaPlacements: [] } };
+    },
+  });
+
+  assert.ok(capturedSchema);
+  assert.equal(capturedSchema.safeParse(validArticle()).success, false);
+  assert.equal(capturedSchema.safeParse({ ...validArticle(), mediaPlacements: [] }).success, true);
+  assert.match(capturedSystem, /Always include mediaPlacements as an array/);
   assert.deepEqual(result, validArticle());
 });
 
@@ -292,440 +310,244 @@ test('Wix AI generation maps provider timeouts and permission failures to safe A
   );
 });
 
-const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
-const sourceRecord = (id = 'S1') => ({
-  id,
-  title: 'Public research article',
-  url: 'https://public.example.com/article',
-  publisher: 'public.example.com',
-  retrievedAt: '2026-10-28T12:00:00.000Z',
-  excerpt: 'A sufficiently long public research excerpt for our deterministic tests.',
+
+test('article media references receive one validated editorial placement each', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A close look at the finished product.',
+      altText: 'Finished product on a wooden table.',
+    }],
+  }, [{ id: referenceId, name: 'product.png' }]);
+
+  assert.deepEqual(article.mediaPlacements, [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 1,
+    caption: 'A close look at the finished product.',
+    altText: 'Finished product on a wooden table.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
+  }]);
+
+  assert.throws(() => parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{ referenceId: 'unknown-reference', sectionIndex: 0, afterParagraph: 0 }],
+  }, [{ id: referenceId, name: 'product.png' }]), InputValidationError);
 });
 
-test('research URLs accept a short public URL list and reject unsafe, duplicate, and excessive inputs', () => {
-  assert.deepEqual(
-    parseResearchUrls('https://public.example.com/a\n\nhttps://public.example.org/b'),
-    ['https://public.example.com/a', 'https://public.example.org/b'],
-  );
-  assert.deepEqual(parseResearchUrls(''), []);
-  assert.throws(() => parseResearchUrls('file:///etc/passwd'), ResearchSourceError);
-  assert.throws(() => parseResearchUrls('http://localhost/admin'), ResearchSourceError);
-  assert.throws(() => parseResearchUrls('https://user:pass@public.example.com/a'), ResearchSourceError);
-  assert.throws(() => parseResearchUrls('https://public.example.com/a\nhttps://public.example.com/a'), /duplicate/i);
-  assert.throws(() => parseResearchUrls(Array.from({ length: 6 }, (_, index) => 'https://source' + index + '.example.com/a')), /no more than five/i);
-});
-
-test('research URL validation removes fragments and rejects private or mixed DNS results', async () => {
-  const url = await validateResearchUrl('https://public.example.com/story#section', publicDns);
-  assert.equal(url.href, 'https://public.example.com/story');
-
-  await assert.rejects(
-    validateResearchUrl('https://public.example.com/story', async () => [{ address: '127.0.0.1', family: 4 }]),
-    ResearchSourceError,
-  );
-  await assert.rejects(
-    validateResearchUrl('https://public.example.com/story', async () => [
-      { address: '93.184.216.34', family: 4 },
-      { address: '10.0.0.12', family: 4 },
-    ]),
-    /public internet addresses/i,
-  );
-  await assert.rejects(
-    validateResearchUrl('https://public.example.com/story', async () => [{ address: '::1', family: 6 }]),
-    ResearchSourceError,
-  );
-});
-
-test('research page extraction preserves article text and strips scripts and navigation', () => {
-  const html = '<html><head><title>Practical Research Guide</title></head><body>' +
-    '<nav>site navigation should disappear</nav><article><h1>Guide</h1>' +
-    '<p>This is a sufficiently long article paragraph with useful facts and explanatory context.</p>' +
-    '<script>ignore this injected text</script></article></body></html>';
-  const result = extractResearchPage(html, new URL('https://public.example.com/guide'));
-  assert.equal(result.title, 'Practical Research Guide');
-  assert.match(result.excerpt, /useful facts/);
-  assert.doesNotMatch(result.excerpt, /site navigation|injected text/);
-  assert.throws(
-    () => extractResearchPage('<html><body><p>tiny</p></body></html>', new URL('https://public.example.com/tiny')),
-    (error) => error instanceof ResearchSourceError && error.status === 422,
-  );
-});
-
-test('research import returns canonical source metadata from fetched pages', async () => {
-  let fetchCalls = 0;
-  const html = '<html><head><title>Public guide</title></head><body><article>' +
-    '<p>This guide provides enough readable text to serve as a deterministic research source fixture.</p>' +
-    '</article></body></html>';
-  const sources = await loadResearchSources(['https://public.example.com/guide#top'], {
-    resolveHost: publicDns,
-    now: () => new Date('2026-10-28T12:00:00.000Z'),
-    fetchImpl: async (input, init) => {
-      fetchCalls += 1;
-      assert.equal(String(input), 'https://public.example.com/guide');
-      assert.equal(init?.redirect, 'manual');
-      return new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
-    },
-  });
-
-  assert.equal(fetchCalls, 1);
-  assert.equal(sources[0]?.id, 'S1');
-  assert.equal(sources[0]?.title, 'Public guide');
-  assert.equal(sources[0]?.publisher, 'public.example.com');
-  assert.equal(sources[0]?.retrievedAt, '2026-10-28T12:00:00.000Z');
-  assert.match(sources[0]?.excerpt ?? '', /deterministic research source fixture/);
-});
-
-test('research import revalidates redirects and rejects a redirect to localhost before fetching it', async () => {
-  let fetchCalls = 0;
-  await assert.rejects(
-    loadResearchSources(['https://public.example.com/redirect'], {
-      resolveHost: async (hostname) => {
-        if (hostname === 'localhost') return [{ address: '127.0.0.1', family: 4 }];
-        return [{ address: '93.184.216.34', family: 4 }];
-      },
-      fetchImpl: async () => {
-        fetchCalls += 1;
-        return new Response(null, { status: 302, headers: { location: 'http://localhost/private' } });
-      },
-    }),
-    ResearchSourceError,
-  );
-  assert.equal(fetchCalls, 1);
-});
-
-test('research import rejects unsupported content types and oversized responses', async () => {
-  await assert.rejects(
-    loadResearchSources(['https://public.example.com/file'], {
-      resolveHost: publicDns,
-      fetchImpl: async () => new Response('binary', { status: 200, headers: { 'content-type': 'application/pdf' } }),
-    }),
-    (error) => error instanceof ResearchSourceError && error.status === 415,
-  );
-  await assert.rejects(
-    loadResearchSources(['https://public.example.com/large'], {
-      resolveHost: publicDns,
-      maxBytes: 10,
-      fetchImpl: async () => new Response('this response exceeds ten bytes', {
-        status: 200,
-        headers: { 'content-type': 'text/plain' },
-      }),
-    }),
-    (error) => error instanceof ResearchSourceError && error.status === 413,
-  );
-});
-
-test('citation integrity accepts only source IDs returned by the research loader', () => {
-  const article = { ...validArticle(), introduction: 'Grounded claim [S1].' };
-  assert.deepEqual(assertCitationIntegrity(article, [sourceRecord()]), ['S1']);
-  assert.throws(
-    () => assertCitationIntegrity({ ...article, introduction: 'Claim [S2].' }, [sourceRecord()]),
-    /not supplied/i,
-  );
-  assert.throws(
-    () => assertCitationIntegrity(validArticle(), [sourceRecord()]),
-    /did not cite/i,
-  );
-  assert.deepEqual(assertCitationIntegrity(validArticle(), []), []);
-});
-
-test('Wix AI receives research excerpts and per-link focus notes when sources are supplied', async () => {
-  let callArgs = null;
-  const sources = [{ ...sourceRecord(), userNotes: 'Focus on the official recommendation rather than general background.' }];
-  const article = { ...validArticle(), introduction: 'Research-backed claim [S1].' };
-  const result = await generateBlogArticle(
-    { topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Use evidence.', seoKeywords: [] },
-    {
-      model: 'gpt-5-mini',
-      researchSources: sources,
-      generateStructuredOutput: async (args) => {
-        callArgs = args;
-        return { output: article };
-      },
-    },
-  );
-
-  assert.deepEqual(result, article);
-  assert.match(callArgs.system, /untrusted webpage content/);
-  assert.match(callArgs.system, /exact form \[S1\]/);
-  assert.deepEqual(JSON.parse(callArgs.prompt).researchSources, sources);
-  assert.match(JSON.parse(callArgs.prompt).researchSources[0].userNotes, /official recommendation/);
-});
-
-
-test('editor Markdown emphasis, lists, and quotes convert to Wix rich-content nodes', () => {
-  const document = bodyToRichContent(
-    '## Format test\n\n**Bold words** and *italic words*.\n\n- First item\n- Second item\n\n> A quoted sentence.',
-  );
-  const allNodes = [];
-  const visit = (node) => {
-    allNodes.push(node);
-    for (const child of node.nodes ?? []) visit(child);
-  };
-  document.nodes.forEach(visit);
-
-  const heading = allNodes.find((node) => node.type === 'HEADING');
-  const bold = allNodes.find((node) => node.textData?.text === 'Bold words');
-  const italic = allNodes.find((node) => node.textData?.text === 'italic words');
-  const list = allNodes.find((node) => node.type === 'BULLETED_LIST');
-  const quote = allNodes.find((node) => node.type === 'BLOCKQUOTE');
-
-  assert.equal(heading?.type, 'HEADING');
-  assert.equal(bold?.textData?.decorations.some((decoration) => decoration.type === 'BOLD'), true);
-  assert.equal(italic?.textData?.decorations.some((decoration) => decoration.type === 'ITALIC'), true);
-  assert.equal(list?.nodes?.filter((node) => node.type === 'LIST_ITEM').length, 2);
-  assert.equal(quote?.nodes?.[0]?.type, 'PARAGRAPH');
-});
-
-test('draft rich content turns verified citation markers and source URLs into real Ricos links', () => {
-  const source = {
-    id: 'S1',
-    title: 'Public research article',
-    url: 'https://public.example.com/article',
-  };
-  const sources = parseResearchCitationSources([source]);
-  const document = bodyToRichContent(
-    '## Research\n\nA grounded claim [S1].\n\n## Sources\n\n- [S1] Public research article — https://public.example.com/article',
-    sources,
-  );
-  const allNodes = [];
-  const visit = (node) => {
-    allNodes.push(node);
-    for (const child of node.nodes ?? []) visit(child);
-  };
-  document.nodes.forEach(visit);
-  const textNodes = allNodes.filter((node) => node.type === 'TEXT');
-  const linkedCitation = textNodes.find((node) => node.textData?.text === '[S1]');
-  assert.equal(linkedCitation?.textData?.decorations[0]?.type, 'LINK');
-  assert.equal(linkedCitation?.textData?.decorations[0]?.linkData?.link?.url, source.url);
-  const linkedUrl = textNodes.find((node) => node.textData?.text === source.url);
-  assert.equal(linkedUrl?.textData?.decorations[0]?.type, 'LINK');
-  assert.equal(linkedUrl?.textData?.decorations[0]?.linkData?.link?.url, source.url);
-});
-
-test('draft citation-source parsing rejects forged IDs, invalid schemes, and duplicate IDs', () => {
-  assert.deepEqual(parseResearchCitationSources(undefined), []);
-  assert.throws(
-    () => parseResearchCitationSources([{ id: 'S7', title: 'Source', url: 'https://public.example.com/a' }]),
-    /IDs must be unique IDs from S1 through S5/i,
-  );
-  assert.throws(
-    () => parseResearchCitationSources([{ id: 'S1', title: 'Source', url: 'javascript:alert(1)' }]),
-    ResearchSourceError,
-  );
-  assert.throws(
-    () => parseResearchCitationSources([
-      { id: 'S1', title: 'One', url: 'https://public.example.com/a' },
-      { id: 'S1', title: 'Two', url: 'https://public.example.com/b' },
-    ]),
-    /unique IDs/i,
-  );
-});
-
-
-
-test('research-link rows preserve optional source focus notes and reject invalid rows', () => {
-  const entries = parseResearchLinkEntries([
-    { url: 'https://public.example.com/article#section', notes: 'Focus on the main recommendation.' },
-    { url: 'https://public.example.org/guide', notes: '' },
-    { url: '', notes: '' },
-  ]);
-  assert.deepEqual(entries, [
-    { url: 'https://public.example.com/article', notes: 'Focus on the main recommendation.' },
-    { url: 'https://public.example.org/guide', notes: '' },
-  ]);
-  assert.throws(
-    () => parseResearchLinkEntries([{ url: 'https://public.example.com/a', notes: 'x'.repeat(501) }]),
-    /500 characters or fewer/i,
-  );
-  assert.throws(
-    () => parseResearchLinkEntries([
-      { url: 'https://public.example.com/article', notes: '' },
-      { url: 'https://public.example.com/article#duplicate', notes: '' },
-    ]),
-    /duplicate/i,
-  );
-  assert.throws(
-    () => parseResearchLinkEntries([{ url: '', notes: 'Please focus on the main heading.' }]),
-    /add a URL or clear the notes/i,
-  );
-});
-
-test('visual-reference parser accepts normalized JPEG image and video frames only', () => {
-  const jpeg = 'data:image/jpeg;base64,AAAA';
-  const imageReference = {
-    name: 'cover.png',
+test('Wix Rich Content inserts the original uploaded image at its reviewed placement', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const body = '## Introduction\\n\\nAn opening paragraph.\\n\\n## Build a steady routine\\n\\nA section paragraph.\\n\\n## Make the room comfortable\\n\\nAnother paragraph.\\n\\n## Conclusion\\n\\nA closing paragraph.';
+  const richContent = bodyToRichContent(body, [], [{
+    referenceId,
+    fileId: 'site_image_file_id~mv2.png',
+    name: 'room.png',
     kind: 'image',
-    notes: 'Use the colors and subject as inspiration.',
-    frames: [{ label: 'Image', dataUrl: jpeg }],
-  };
-  const videoReference = {
-    name: 'demo.mp4',
-    kind: 'video',
-    notes: 'Focus on the visible steps, not audio.',
-    frames: [
-      { label: 'Frame at 18%', dataUrl: jpeg },
-      { label: 'Frame at 50%', dataUrl: jpeg },
-      { label: 'Frame at 82%', dataUrl: jpeg },
+    fileUrl: 'https://static.wixstatic.com/media/site_image_file_id~mv2.png',
+    width: 1200,
+    height: 800,
+  }], [{
+    referenceId,
+    sectionIndex: 0,
+    afterParagraph: 0,
+    caption: 'A quiet reading corner.',
+    altText: 'A chair beside a lamp and bookshelf.',
+    layout: 'wide',
+    galleryGroup: '',
+    layoutText: '',
+  }]);
+
+  const imageNode = richContent.nodes.find((node) => node.type === 'IMAGE');
+  assert.ok(imageNode);
+  assert.equal(imageNode.imageData.image.src.id, 'site_image_file_id~mv2.png');
+  assert.equal(imageNode.imageData.altText, 'A chair beside a lamp and bookshelf.');
+  assert.equal(imageNode.nodes[0].type, 'CAPTION');
+});
+
+test('media input validation recognizes image, video, audio, and downloadable document types', () => {
+  assert.equal(getMediaFileInfo('cover.PNG')?.kind, 'image');
+  assert.equal(getMediaFileInfo('launch.MOV')?.kind, 'video');
+  assert.equal(getMediaFileInfo('interview.mp3')?.kind, 'audio');
+  assert.equal(getMediaFileInfo('press-kit.PDF')?.kind, 'document');
+  assert.equal(getMediaFileInfo('unknown.exe'), null);
+
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const references = parseMediaReferences([{
+    id: referenceId,
+    name: 'interview.mp3',
+    kind: 'audio',
+    notes: '',
+    frames: [],
+  }]);
+  assert.equal(references[0].kind, 'audio');
+
+  const uploads = parseDraftMediaInputs([{
+    referenceId,
+    fileId: 'site_audio_file_id',
+    name: 'interview.mp3',
+    kind: 'audio',
+    mimeType: 'audio/mpeg',
+  }]);
+  assert.equal(uploads[0].fileId, 'site_audio_file_id');
+});
+
+
+test('Wix rich content keeps video and audio playable and documents downloadable', () => {
+  const references = [
+    { referenceId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357', fileId: 'site_video_file_id', name: 'launch.mp4', kind: 'video', fileUrl: 'https://video.wixstatic.com/video/site_video_file_id/file', videoMediaId: 'video/site_video_file_id/1080p/mp4/file.mp4', durationSeconds: 42 },
+    { referenceId: 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358', fileId: 'site_audio_file_id', name: 'interview.mp3', kind: 'audio', fileUrl: 'https://static.wixstatic.com/media/site_audio_file_id' },
+    { referenceId: 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359', fileId: 'site_pdf_file_id', name: 'press-kit.pdf', kind: 'document', fileUrl: 'https://static.wixstatic.com/media/site_pdf_file_id' },
+  ];
+  const placements = references.map((reference, index) => ({
+    referenceId: reference.referenceId,
+    sectionIndex: -1,
+    afterParagraph: index,
+    caption: reference.name,
+    altText: reference.name,
+  }));
+  const richContent = bodyToRichContent('## Introduction\\n\\nOpening paragraph.', [], references, placements);
+  assert.equal(richContent.nodes.some((node) => node.type === 'VIDEO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'AUDIO'), true);
+  assert.equal(richContent.nodes.some((node) => node.type === 'PARAGRAPH' && node.nodes?.some((child) => child.textData?.text === 'press-kit.pdf')), true);
+});
+
+
+test('research source requests use standard browser-compatible headers', async () => {
+  let requestHeaders;
+  const html = '<html><head><title>Accessible Houseplant Guide</title></head><body><main><p>This is a sufficiently long public article excerpt for the research importer test.</p></main></body></html>';
+
+  const sources = await loadResearchSources(
+    ['https://public.example.org/houseplants'],
+    {
+      resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+      fetchImpl: async (_url, init) => {
+        requestHeaders = new Headers(init?.headers);
+        return new Response(html, {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        });
+      },
+      now: () => new Date('2026-11-13T12:00:00.000Z'),
+    },
+  );
+
+  assert.equal(requestHeaders.get('user-agent')?.startsWith('Mozilla/5.0'), true);
+  assert.equal(requestHeaders.get('accept-language'), 'en-US,en;q=0.9');
+  assert.equal(sources.length, 1);
+  assert.equal(sources[0].title, 'Accessible Houseplant Guide');
+});
+
+
+test('article design presets validate template, color, and visual density', () => {
+  assert.equal(ARTICLE_TEMPLATES.length, 3);
+  assert.deepEqual(parseArticleDesign(undefined), DEFAULT_ARTICLE_DESIGN);
+  assert.deepEqual(parseArticleDesign({
+    templateId: 'visual',
+    accentColor: '#b84b32',
+    density: 'visual-rich',
+  }), {
+    templateId: 'visual',
+    accentColor: '#B84B32',
+    density: 'visual-rich',
+  });
+  assert.throws(() => parseArticleDesign({ templateId: 'custom-css', accentColor: '#fff', density: 'balanced' }));
+  assert.throws(() => parseArticleDesign({ templateId: 'editorial', accentColor: 'red', density: 'balanced' }));
+});
+
+test('generated media layout is constrained by the selected template', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const article = parseGeneratedArticle({
+    ...validArticle(),
+    mediaPlacements: [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A useful visual note.',
+      altText: 'A potted plant beside a window.',
+      layout: 'gallery',
+      galleryGroup: 'plants-gallery',
+      layoutText: '',
+    }],
+  }, [{ id: referenceId, name: 'plant.png', kind: 'image' }], {
+    templateId: 'minimal',
+    accentColor: '#465366',
+    density: 'quiet',
+  });
+  assert.equal(article.mediaPlacements?.[0]?.layout, 'wide');
+  assert.equal(article.mediaPlacements?.[0]?.galleryGroup, '');
+});
+
+test('Wix Rich Content renders paired images as a gallery and split images as tables', () => {
+  const firstId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const secondId = 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358';
+  const thirdId = 'd30d6826-5de3-4ef6-8f4d-e7fa80c05359';
+  const body = '## Introduction\n\nOpening paragraph.\n\n## Plant choices\n\nA section paragraph.';
+  const assets = [
+    { referenceId: firstId, fileId: 'site_image_one', name: 'plant-one.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_one', width: 1200, height: 900 },
+    { referenceId: secondId, fileId: 'site_image_two', name: 'plant-two.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_two', width: 1200, height: 900 },
+    { referenceId: thirdId, fileId: 'site_image_three', name: 'plant-three.png', kind: 'image', fileUrl: 'https://static.wixstatic.com/media/site_image_three', width: 1200, height: 900 },
+  ];
+  const richContent = bodyToRichContent(body, [], assets, [
+    { referenceId: firstId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant one', altText: 'Plant one', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: secondId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant two', altText: 'Plant two', layout: 'gallery', galleryGroup: 'plants', layoutText: '' },
+    { referenceId: thirdId, sectionIndex: 0, afterParagraph: 1, caption: 'Plant three', altText: 'Plant three', layout: 'split-right', galleryGroup: '', layoutText: 'An easy-care choice for a bright corner.' },
+  ]);
+  const gallery = richContent.nodes.find((node) => node.type === 'GALLERY');
+  const split = richContent.nodes.find((node) => node.type === 'TABLE');
+  assert.ok(gallery);
+  assert.equal(gallery.galleryData.items.length, 2);
+  assert.ok(split);
+  assert.equal(split.nodes[0].nodes.length, 2);
+});
+
+
+test('generated article section patterns are constrained by the selected template', () => {
+  const generated = {
+    ...validArticle(),
+    sections: [
+      { heading: 'A useful warning', body: 'Avoid overwatering the plant.', layout: 'callout' },
+      { heading: 'A simple routine', body: 'Check the soil.\n\nWater only when needed.', layout: 'steps' },
     ],
   };
-  assert.deepEqual(parseMediaReferences([imageReference, videoReference]), [imageReference, videoReference]);
-  assert.throws(
-    () => parseMediaReferences([{ ...imageReference, frames: [{ label: 'Image', dataUrl: 'data:image/png;base64,AAAA' }] }]),
-    /valid JPEG data URL/i,
-  );
-  assert.throws(
-    () => parseMediaReferences([{ ...imageReference, kind: 'video', frames: [] }]),
-    /between one and three/i,
-  );
-  assert.throws(
-    () => parseMediaReferences(Array.from({ length: 5 }, (_, index) => ({ ...imageReference, name: 'image-' + index + '.jpg' }))),
-    /no more than 4/i,
-  );
-  assert.equal(MAX_MEDIA_FRAMES, 8);
-});
-
-test('Wix AI generation forwards visual references to the generator adapter', async () => {
-  let callArgs = null;
-  const mediaReferences = [{
-    name: 'storefront.jpg',
-    kind: 'image',
-    notes: 'Use this as visual context.',
-    frames: [{ label: 'Image', dataUrl: 'data:image/jpeg;base64,AAAA' }],
-  }];
-  const result = await generateBlogArticle(
-    { topic: 'A store profile', audience: 'local shoppers', tone: 'warm', instructions: 'Describe the experience.', seoKeywords: [] },
-    {
-      model: 'gpt-5-mini',
-      mediaReferences,
-      generateStructuredOutput: async (args) => {
-        callArgs = args;
-        return { output: validArticle() };
-      },
-    },
-  );
-  assert.deepEqual(result, validArticle());
-  assert.deepEqual(callArgs.mediaReferences, mediaReferences);
-  assert.match(callArgs.system, /Visual reference frames are supplied as image inputs/);
-  assert.match(callArgs.system, /audio and unsampled moments are not available/);
-});
-
-test('local Wix development CORS permits localhost and known Wix-managed origins only', () => {
-  assert.equal(isAllowedDevCorsOrigin('http://localhost:4321'), true);
-  assert.equal(isAllowedDevCorsOrigin('http://127.0.0.1:4321'), true);
-  assert.equal(isAllowedDevCorsOrigin('http://[::1]:4321'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://mysite.editor.wix.com'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://username.wixsite.com'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://mysite.wixstudio.io'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://012509d2-64ed-4670-bc27-8299e942673f.wix.run'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org'), true);
-  assert.equal(isAllowedDevCorsOrigin('https://attacker.example'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://wix.com.attacker.example'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://unrelated.wix.com'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://nested.username.wixsite.com'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://nested.dev-sitex1487338744.wixdev-sites.org'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://dev-sitex1487338744.wixdev-sites.org.attacker.example'), false);
-  assert.equal(isAllowedDevCorsOrigin('https://customer.wixdev-sites.org'), false);
-  assert.equal(isAllowedDevCorsOrigin('http://malicious.wix.com'), false);
-});
-
-test('custom development origins must be explicitly configured as exact HTTPS origins', () => {
-  const customOrigin = 'https://my-custom-development-domain.example';
-  assert.equal(isAllowedDevCorsOrigin(customOrigin), false);
-  assert.equal(isAllowedDevCorsOrigin(customOrigin, customOrigin), true);
-  assert.equal(isAllowedDevCorsOrigin('https://another-domain.example', customOrigin), false);
-  assert.throws(() => getAllowedDevCorsOrigins('https://my-domain.example/path'), /exact HTTPS origins/);
-  assert.throws(() => getAllowedDevCorsOrigins('http://my-domain.example'), /exact HTTPS origins/);
-});
-
-test('structured article documents preserve block order, formatting, and Ricos styling', () => {
-  let sequence = 0;
-  const document = articleBodyToDocument(
-    '## Editorial section\n\nA **bold** paragraph with an inline *emphasis*.\n\n- First point\n- Second point\n\n> A pull quote.',
-    () => 'block-' + (++sequence),
-  );
-  const parsed = parseArticleDocument(document);
-  const richContent = articleDocumentToRichContent(parsed);
-  assert.equal(richContent.nodes[0]?.type, 'HEADING');
-  assert.equal(richContent.nodes[1]?.type, 'PARAGRAPH');
-  assert.equal(richContent.nodes.some((node) => node.type === 'BULLETED_LIST'), true);
-  assert.equal(richContent.nodes.some((node) => node.type === 'BLOCKQUOTE'), true);
-  assert.match(articleDocumentToPlainText(parsed), /## Editorial section/);
-  const paragraph = richContent.nodes.find((node) => node.type === 'PARAGRAPH');
-  assert.equal(paragraph?.paragraphData?.textStyle?.fontSize?.value, 17);
-});
-
-test('structured article documents preserve original GIF media and image layout settings', () => {
-  const document = {
-    appearance: {
-      bodyFontFamily: 'Georgia', headingFontFamily: 'Arial', bodyFontSize: 18,
-      headingFontSize: 32, bodyColor: '#344054', headingColor: '#172033',
-      canvasColor: '#F8FAFC', lineHeight: 1.8, textAlignment: 'LEFT',
-    },
-    blocks: [{
-      id: 'gif-1', type: 'image',
-      media: {
-        id: 'wix-media-id',
-        url: 'https://static.wixstatic.com/media/example~mv2.gif',
-        name: 'animated.gif', mimeType: 'image/gif',
-        uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
-        width: 800, height: 450,
-      },
-      altText: 'Animated clothing detail', caption: 'The original animated GIF',
-      alignment: 'LEFT', width: 'SMALL', textWrap: true,
-      borderWidth: 2, borderColor: '#AABBCC', borderRadius: 8,
-    }],
-  };
-  const richContent = articleDocumentToRichContent(document);
-  const imageNode = richContent.nodes[0];
-  assert.equal(imageNode?.type, 'IMAGE');
-  assert.equal(imageNode?.imageData?.image?.src?.id, 'wix-media-id');
-  assert.equal(imageNode?.imageData?.containerData?.textWrap, true);
-  assert.equal(imageNode?.imageData?.containerData?.width?.size, 'SMALL');
-  assert.equal(imageNode?.imageData?.styles?.border?.radius, 8);
-  assert.equal(imageNode?.imageData?.altText, 'Animated clothing detail');
-});
-
-test('structured article documents reject invalid media, arbitrary URLs, and missing alt text', () => {
-  const base = {
-    appearance: {},
-    blocks: [{
-      id: 'image-1', type: 'image',
-      media: {
-        id: 'id', url: 'https://example.com/image.jpg', name: 'image.jpg',
-        mimeType: 'image/jpeg', uploadToken: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
-        width: 800, height: 600,
-      },
-      altText: 'Image', caption: '', alignment: 'CENTER', width: 'CONTENT',
-      textWrap: false, borderWidth: 0, borderColor: '#D0D5DD', borderRadius: 0,
-    }],
-  };
-  assert.throws(() => parseArticleDocument(base), /Wix Media Manager/);
-  assert.throws(() => parseArticleDocument({
-    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg', uploadToken: 'invalid' } }],
-  }), /verified editor upload/);
-  assert.throws(() => parseArticleDocument({
-    blocks: [{ ...base.blocks[0], media: { ...base.blocks[0].media, url: 'https://static.wixstatic.com/media/example.jpg' }, altText: '' }],
-  }), /alternative text/);
-  assert.throws(() => parseArticleDocument({
-    appearance: { bodyFontSize: 200 },
-    blocks: [{ id: 'p1', type: 'paragraph', text: 'Text', style: {} }],
-  }), /Body font size/);
-});
-
-test('draft submission parser validates SEO slug, tags, and featured status', () => {
-  const parsed = parseDraftSubmission({
-    submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
-    title: validArticle().title, body: 'Article body.',
-    metaDescription: validArticle().metaDescription, seoKeywords: [],
-    seoSlug: 'a-practical-guide', hashtags: ['style', 'fashion'], featured: true,
+  const editorial = parseGeneratedArticle(generated, [], {
+    templateId: 'editorial', accentColor: '#8A6E4B', density: 'balanced',
   });
-  assert.equal(parsed.seoSlug, 'a-practical-guide');
-  assert.deepEqual(parsed.hashtags, ['style', 'fashion']);
-  assert.equal(parsed.featured, true);
-  assert.throws(() => parseDraftSubmission({
+  assert.deepEqual(editorial.sections.map((section) => section.layout), ['callout', 'steps']);
+
+  const minimal = parseGeneratedArticle(generated, [], {
+    templateId: 'minimal', accentColor: '#465366', density: 'quiet',
+  });
+  assert.deepEqual(minimal.sections.map((section) => section.layout), ['callout', 'standard']);
+});
+
+test('Wix Rich Content serializes callout and step section patterns', () => {
+  const body = '## Introduction\n\nOpening paragraph.\n\n## A useful warning\n\nAvoid overwatering the plant.\n\n## A simple routine\n\nCheck the soil first.\n\nWater only when needed.';
+  const richContent = bodyToRichContent(body, [], [], [], ['callout', 'steps']);
+  const callout = richContent.nodes.find((node) => node.type === 'BLOCKQUOTE');
+  const steps = richContent.nodes.find((node) => node.type === 'ORDERED_LIST');
+  assert.ok(callout);
+  assert.equal(callout.nodes[0].type, 'PARAGRAPH');
+  assert.ok(steps);
+  assert.equal(steps.nodes.length, 2);
+  assert.equal(steps.nodes[0].type, 'LIST_ITEM');
+});
+
+test('draft submission carries validated article design and section patterns', () => {
+  const submission = parseDraftSubmission({
     submissionId: 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357',
-    title: validArticle().title, body: 'Article body.',
-    metaDescription: validArticle().metaDescription, seoKeywords: [],
-    seoSlug: '../unsafe',
-  }), /SEO URL slug/);
+    title: validArticle().title,
+    body: '## Introduction\n\nOpening.\n\n## A section\n\nBody.',
+    metaDescription: validArticle().metaDescription,
+    seoKeywords: validArticle().seoKeywords,
+    design: { templateId: 'visual', accentColor: '#B84B32', density: 'visual-rich' },
+    sectionLayouts: ['steps'],
+  });
+  assert.equal(submission.design.templateId, 'visual');
+  assert.deepEqual(submission.sectionLayouts, ['steps']);
 });

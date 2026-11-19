@@ -1,0 +1,54 @@
+---
+if (!import.meta.env.DEV) {
+  return Astro.redirect('/');
+}
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Development UI Previews</title>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Wix Blog Generator</p>
+      <h1>Development UI previews</h1>
+      <p class="intro">Local-only screens for editing the UI and checking the workflow without requiring a Wix member session.</p>
+
+      <nav aria-label="Available previews">
+        <a href="/dev/member-access">
+          <strong>Member access flow</strong>
+          <span>Login, approved workflow, permission denied, and unavailable access states.</span>
+        </a>
+        <a href="/dev/blog-workflow">
+          <strong>Complete blog workflow</strong>
+          <span>Brief form, mock article generation, article editing, and simulated draft saving.</span>
+        </a>
+        <a href="/dev/blog-brief">
+          <strong>Blog brief form</strong>
+          <span>Work on the topic, audience, tone, instructions, and SEO fields independently.</span>
+        </a>
+        <a href="/dev/article-review">
+          <strong>Article review editor</strong>
+          <span>Work on the generated article editor and metadata presentation independently.</span>
+        </a>
+      </nav>
+    </main>
+  </body>
+</html>
+
+<style>
+  :global(html), :global(body) { margin: 0; min-height: 100%; }
+  body { box-sizing: border-box; padding: 32px 20px; background: #eef2f7; color: #172033; font-family: ui-sans-serif, system-ui, sans-serif; }
+  main { width: min(100%, 900px); margin: 0 auto; }
+  .eyebrow { color: #526078; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+  h1 { margin: 8px 0; font-size: clamp(28px, 5vw, 40px); }
+  .intro { max-width: 650px; color: #5c6472; line-height: 1.65; }
+  nav { display: grid; gap: 12px; margin-top: 28px; }
+  a { display: grid; gap: 6px; padding: 20px; border: 1px solid #d9dfe9; border-radius: 14px; background: #fff; color: inherit; text-decoration: none; }
+  a:hover { border-color: #8da8d5; }
+  a strong { font-size: 17px; }
+  a span { color: #5c6472; font-size: 14px; line-height: 1.5; }
+</style>
