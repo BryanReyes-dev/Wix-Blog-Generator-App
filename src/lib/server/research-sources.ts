@@ -16,17 +16,39 @@ export type ResearchSource = {
   userNotes?: string;
 };
 
-export type ResearchLinkEntry = { url: string; notes: string };
+export type ResearchLinkEntry = { id: string; url: string; notes: string };
+
+export type ResearchLinkCheck = {
+  id: string;
+  url: string;
+  status: 'success' | 'error';
+  title?: string;
+  message?: string;
+};
+
+export type ResearchSourceLoadResult = {
+  sources: ResearchSource[];
+  checks: ResearchLinkCheck[];
+};
 
 export type ResearchCitationSource = Pick<ResearchSource, 'id' | 'title' | 'url'>;
 
+type ResearchSourceDiagnostics = {
+  stage?: 'url_validation' | 'dns_lookup' | 'fetch' | 'http_response' | 'content_type' | 'content_extraction' | 'duplicate';
+  httpStatus?: number;
+  causeName?: string;
+  causeCode?: string;
+};
+
 export class ResearchSourceError extends Error {
   readonly status: number;
+  readonly diagnostics: ResearchSourceDiagnostics;
 
-  constructor(message: string, status = 422) {
+  constructor(message: string, status = 422, diagnostics: ResearchSourceDiagnostics = {}) {
     super(message);
     this.name = 'ResearchSourceError';
     this.status = status;
+    this.diagnostics = diagnostics;
   }
 }
 
@@ -177,8 +199,17 @@ export async function validateResearchUrl(
   let addresses: ResolvedAddress[];
   try {
     addresses = await resolveHost(url.hostname);
-  } catch {
-    throw new ResearchSourceError('The research link host could not be verified. Check the URL and try again.', 422);
+  } catch (error) {
+    const record = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+    throw new ResearchSourceError(
+      'The website hostname could not be verified. This may be a temporary DNS or network issue.',
+      422,
+      {
+        stage: 'dns_lookup',
+        causeName: typeof record.name === 'string' ? record.name.slice(0, 80) : undefined,
+        causeCode: typeof record.code === 'string' ? record.code.slice(0, 80) : undefined,
+      },
+    );
   }
 
   if (!Array.isArray(addresses) || addresses.length === 0 || addresses.some((address) => !isPublicAddress(address))) {
@@ -255,10 +286,11 @@ export function parseResearchLinkEntries(value: unknown): ResearchLinkEntry[] {
       ? value
       : (() => { throw new ResearchSourceError('Research links must be a list of URLs.', 400); })();
 
+  const usedIds = new Set<string>();
   const normalizedEntries = entries.map((entry, index): ResearchLinkEntry | null => {
     if (typeof entry === 'string') {
       const url = entry.trim();
-      return url ? { url, notes: '' } : null;
+      return url ? { id: 'research-link-' + (index + 1), url, notes: '' } : null;
     }
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new ResearchSourceError(`Research link ${index + 1} is invalid.`, 400);
@@ -273,15 +305,22 @@ export function parseResearchLinkEntries(value: unknown): ResearchLinkEntry[] {
     if (typeof notes !== 'string' || notes.length > 500) {
       throw new ResearchSourceError(`Notes for research link ${index + 1} must be 500 characters or fewer.`, 400);
     }
-    return { url, notes: notes.trim() };
+
+    const candidateId = typeof record.id === 'string' ? record.id.trim() : '';
+    const safeId = /^[A-Za-z0-9_-]{1,100}$/.test(candidateId) && !usedIds.has(candidateId)
+      ? candidateId
+      : 'research-link-' + (index + 1);
+    usedIds.add(safeId);
+    return { id: safeId, url, notes: notes.trim() };
   }).filter((entry): entry is ResearchLinkEntry => entry !== null);
 
   if (normalizedEntries.length > MAX_RESEARCH_SOURCES) {
     throw new ResearchSourceError('Use no more than five research links per article.', 400);
   }
 
-  const urls = parseResearchUrls(normalizedEntries.map((entry) => entry.url));
-  return normalizedEntries.map((entry, index) => ({ ...entry, url: urls[index] ?? entry.url }));
+  // URL syntax, DNS, redirects, and duplicate checks run per row in
+  // loadResearchSourcesIndividually so a bad link never hides its siblings.
+  return normalizedEntries;
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -425,8 +464,21 @@ async function fetchResearchPage(
         redirect: 'manual',
         signal: AbortSignal.timeout(config.timeoutMs),
       });
-    } catch {
-      throw new ResearchSourceError('A research page could not be reached. Check the link and try again.', 422);
+    } catch (error) {
+      const record = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+      const errorName = typeof record.name === 'string' ? record.name : '';
+      const timedOut = errorName === 'TimeoutError' || errorName === 'AbortError';
+      throw new ResearchSourceError(
+        timedOut
+          ? 'The website did not respond within ' + Math.round(config.timeoutMs / 1000) + ' seconds. Try another page or retry later.'
+          : 'The website could not be reached because the connection failed. Try another public page or retry later.',
+        422,
+        {
+          stage: 'fetch',
+          causeName: errorName.slice(0, 80) || undefined,
+          causeCode: typeof record.code === 'string' ? record.code.slice(0, 80) : undefined,
+        },
+      );
     }
 
     if ([301, 302, 303, 307, 308].includes(response.status)) {
@@ -447,12 +499,25 @@ async function fetchResearchPage(
     }
 
     if (!response.ok) {
-      throw new ResearchSourceError('A research page could not be retrieved. Check that the URL is public and accessible.', 422);
+      const message = response.status === 401 || response.status === 403
+        ? 'The website blocked automated access (HTTP ' + response.status + '). Try another publicly accessible article page.'
+        : response.status === 404
+          ? 'The page was not found (HTTP 404). Check the URL or replace it with the article page.'
+          : response.status === 429
+            ? 'The website temporarily rate-limited the request (HTTP 429). Retry later or use another source.'
+            : response.status >= 500
+              ? 'The website is temporarily unavailable (HTTP ' + response.status + '). Retry later or use another source.'
+              : 'The website returned HTTP ' + response.status + '. Check the URL or use another public article page.';
+      throw new ResearchSourceError(message, 422, { stage: 'http_response', httpStatus: response.status });
     }
 
     const contentType = (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase();
     if (contentType !== 'text/html' && contentType !== 'text/plain') {
-      throw new ResearchSourceError('Only public HTML articles and plain-text pages can be imported right now.', 415);
+      throw new ResearchSourceError(
+        'This URL returned ' + (contentType || 'an unknown content type') + ', not an HTML or plain-text article. Link directly to a public webpage.',
+        415,
+        { stage: 'content_type', httpStatus: response.status },
+      );
     }
 
     const text = await readResponseText(response, config.maxBytes);
@@ -461,6 +526,104 @@ async function fetchResearchPage(
   }
 
   throw new ResearchSourceError('A research link could not be retrieved.', 422);
+}
+
+export async function loadResearchSourcesIndividually(
+  links: ResearchLinkEntry[],
+  options: ResearchSourceLoaderConfig = {},
+): Promise<ResearchSourceLoadResult> {
+  const config = {
+    fetchImpl: options.fetchImpl ?? fetch,
+    resolveHost: options.resolveHost ?? resolveHostname,
+    timeoutMs: options.timeoutMs ?? 10_000,
+    maxBytes: options.maxBytes ?? MAX_RESEARCH_RESPONSE_BYTES,
+    now: options.now ?? (() => new Date()),
+  };
+
+  if (links.length > MAX_RESEARCH_SOURCES) {
+    throw new ResearchSourceError('Use no more than five research links per article.', 400);
+  }
+
+  const seenUrls = new Set<string>();
+  const outcomes = await Promise.all(links.map(async (link, index) => {
+    const sourceId = 'S' + (index + 1);
+    const startedAt = Date.now();
+    let hostname: string | null = null;
+    let stage: ResearchSourceDiagnostics['stage'] = 'url_validation';
+
+    try {
+      const parsedUrl = validateUrlSyntax(link.url);
+      hostname = parsedUrl.hostname;
+      if (seenUrls.has(parsedUrl.href)) {
+        throw new ResearchSourceError(
+          'This URL duplicates an earlier research link. Use a different page or remove this row.',
+          400,
+          { stage: 'duplicate' },
+        );
+      }
+      // Map callbacks run synchronously until their first await, preserving the
+      // submitted order for deterministic duplicate detection and citation IDs.
+      seenUrls.add(parsedUrl.href);
+
+      stage = 'dns_lookup';
+      const safeUrl = await validateResearchUrl(parsedUrl.href, config.resolveHost);
+      stage = 'fetch';
+      const page = await fetchResearchPage(safeUrl, config);
+      const source: ResearchSource = {
+        id: sourceId,
+        title: page.title,
+        url: page.url.href,
+        publisher: page.url.hostname.replace(/^www\\./, ''),
+        retrievedAt: config.now().toISOString(),
+        excerpt: page.excerpt,
+      };
+      const durationMs = Date.now() - startedAt;
+      console.info('[workflow/research] link check succeeded', {
+        sourceId,
+        linkId: link.id,
+        hostname,
+        httpStatus: 200,
+        durationMs,
+      });
+      return {
+        source,
+        check: { id: link.id, url: link.url, status: 'success' as const, title: page.title },
+      };
+    } catch (error) {
+      const sourceError = error instanceof ResearchSourceError ? error : null;
+      const message = sourceError?.message ?? 'The research page could not be checked because an unexpected server error occurred.';
+      const diagnostics = sourceError?.diagnostics;
+      console.error('[workflow/research] link check failed', {
+        sourceId,
+        linkId: link.id,
+        hostname: hostname ?? getResearchHostname(link.url),
+        stage: diagnostics?.stage ?? stage,
+        httpStatus: diagnostics?.httpStatus ?? 'unknown',
+        errorName: diagnostics?.causeName ?? (error instanceof Error ? error.name : 'UnknownError'),
+        errorCode: diagnostics?.causeCode ?? 'unknown',
+        status: sourceError?.status ?? 500,
+        durationMs: Date.now() - startedAt,
+        message,
+      });
+      return {
+        source: null,
+        check: { id: link.id, url: link.url, status: 'error' as const, message },
+      };
+    }
+  }));
+
+  return {
+    sources: outcomes.flatMap((outcome) => outcome.source ? [outcome.source] : []),
+    checks: outcomes.map((outcome) => outcome.check),
+  };
+}
+
+function getResearchHostname(value: string): string | null {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
 }
 
 export async function loadResearchSources(
