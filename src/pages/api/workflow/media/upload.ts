@@ -44,40 +44,89 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     await requireApprovedSiteMember();
 
-    let form: FormData;
-    try {
-      form = await request.formData();
-    } catch {
-      return jsonResponse({ error: "Send a multipart form containing an image file." }, 400);
+    const contentType = (request.headers.get("content-type") ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase() ?? "";
+    let fileName = "";
+    let mimeType = "";
+    let fileBuffer: ArrayBuffer;
+
+    if (contentType === "multipart/form-data") {
+      // Backwards compatibility for clients deployed before the raw-body upload.
+      let form: FormData;
+      try {
+        form = await request.formData();
+      } catch (error) {
+        console.warn("[article-media] Multipart request parsing failed:", {
+          contentType,
+          contentLength: request.headers.get("content-length"),
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: error instanceof Error ? error.message.slice(0, 240) : "Unknown parser error",
+        });
+        return jsonResponse({ error: "Wix could not parse the multipart image upload. Refresh the app and try again." }, 400);
+      }
+
+      const file = form.get("file");
+      if (
+        !file ||
+        typeof file !== "object" ||
+        typeof (file as File).arrayBuffer !== "function" ||
+        typeof (file as File).name !== "string" ||
+        typeof (file as File).type !== "string" ||
+        typeof (file as File).size !== "number"
+      ) {
+        return jsonResponse({ error: "Choose an image file to upload." }, 400);
+      }
+
+      fileName = (file as File).name;
+      mimeType = (file as File).type.toLowerCase();
+      if ((file as File).size <= 0 || (file as File).size > MAX_UPLOAD_BYTES) {
+        return jsonResponse({ error: "Original article images must be 20 MB or smaller. Compress the file and try again." }, 413);
+      }
+      fileBuffer = await (file as File).arrayBuffer();
+    } else {
+      // Raw binary requests avoid multipart boundary parsing in the Wix proxy.
+      const url = new URL(request.url);
+      fileName = url.searchParams.get("fileName") ?? "";
+      mimeType = contentType;
+      if (!fileName || fileName.length > 255 || /[\\/\\u0000-\\u001f]/.test(fileName)) {
+        return jsonResponse({ error: "The uploaded image filename is missing or invalid." }, 400);
+      }
+      const contentLength = Number(request.headers.get("content-length") ?? 0);
+      if (contentLength > MAX_UPLOAD_BYTES) {
+        return jsonResponse({ error: "Original article images must be 20 MB or smaller. Compress the file and try again." }, 413);
+      }
+      if (!ALLOWED_TYPES.has(mimeType)) {
+        return jsonResponse({ error: "Send the image as JPEG, PNG, WebP, or GIF binary data." }, 415);
+      }
+      fileBuffer = await request.arrayBuffer();
     }
 
-    const file = form.get("file");
-    if (!(file instanceof File)) return jsonResponse({ error: "Choose an image file to upload." }, 400);
-    if (!ALLOWED_TYPES.has(file.type)) {
+    if (!ALLOWED_TYPES.has(mimeType)) {
       return jsonResponse({ error: "Use a JPEG, PNG, WebP, or GIF image." }, 415);
     }
-    if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
+    if (fileBuffer.byteLength <= 0 || fileBuffer.byteLength > MAX_UPLOAD_BYTES) {
       return jsonResponse({ error: "Original article images must be 20 MB or smaller. Compress the file and try again." }, 413);
     }
 
-    const fileBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(fileBuffer);
-    if (!hasValidSignature(file.type, bytes)) {
+    if (!hasValidSignature(mimeType, bytes)) {
       return jsonResponse({ error: "The file content does not match its declared image type." }, 415);
     }
 
     const uploadToken = crypto.randomUUID();
-    const displayName = "blog-editor-" + uploadToken + "-" + safeFileName(file.name, file.type);
+    const displayName = "blog-editor-" + uploadToken + "-" + safeFileName(fileName, mimeType);
     const generateUploadUrl = auth.elevate(files.generateFileUploadUrl);
-    const generated = await generateUploadUrl(file.type, { fileName: displayName, private: false });
+    const generated = await generateUploadUrl(mimeType, { fileName: displayName, private: false });
     if (!generated.uploadUrl) {
       throw new Error("Wix Media Manager did not return an upload URL.");
     }
 
     const uploadResponse = await fetch(generated.uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: new Blob([fileBuffer], { type: file.type }),
+      headers: { "Content-Type": mimeType },
+      body: new Blob([fileBuffer], { type: mimeType }),
     });
     if (!uploadResponse.ok) {
       console.error("[article-media] Wix Media Manager upload failed:", { status: uploadResponse.status });
