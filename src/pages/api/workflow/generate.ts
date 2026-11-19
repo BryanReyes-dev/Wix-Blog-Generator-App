@@ -8,9 +8,10 @@ import { InputValidationError, parseBlogBrief, parseGeneratedArticle } from '../
 import { AiProviderError, generateBlogArticle } from '../../../lib/server/generate-blog-article';
 import {
   assertCitationIntegrity,
-  loadResearchSources,
+  loadResearchSourcesIndividually,
   parseResearchLinkEntries,
   ResearchSourceError,
+  type ResearchLinkCheck,
 } from '../../../lib/server/research-sources';
 import { MediaReferenceError, parseMediaReferences } from '../../../lib/server/media-references';
 import { parseArticleDesign } from '../../../lib/article-layout';
@@ -20,6 +21,7 @@ type ServerEnvironment = ImportMetaEnv & {
 };
 
 export const POST: APIRoute = async ({ request }) => {
+  let researchLinkResults: ResearchLinkCheck[] = [];
   try {
     const member = await requireApprovedSiteMember();
 
@@ -44,8 +46,16 @@ export const POST: APIRoute = async ({ request }) => {
     } catch (error) {
       throw new InputValidationError(error instanceof Error ? error.message : 'The article design settings are invalid.');
     }
-    const loadedSources = await loadResearchSources(researchLinks.map((link) => link.url));
-    const researchSources = loadedSources.map((source, index) => ({
+    const researchResult = await loadResearchSourcesIndividually(researchLinks);
+    researchLinkResults = researchResult.checks;
+    const failedLinks = researchLinkResults.filter((result) => result.status === 'error');
+    if (failedLinks.length > 0) {
+      return jsonResponse({
+        error: failedLinks.length + ' research link(s) could not be verified. Replace or remove the highlighted link(s), then try again.',
+        researchLinkResults,
+      }, 422);
+    }
+    const researchSources = researchResult.sources.map((source, index) => ({
       ...source,
       userNotes: researchLinks[index]?.notes || undefined,
     }));
@@ -77,7 +87,7 @@ export const POST: APIRoute = async ({ request }) => {
       ...source,
       excerpt: excerpt.slice(0, 280),
     }));
-    return jsonResponse({ article, sources, generatedBy: { memberId: member.memberId } });
+    return jsonResponse({ article, sources, researchLinkResults, generatedBy: { memberId: member.memberId } });
   } catch (error) {
     if (error instanceof ResearchSourceError) {
       return jsonResponse({ error: error.message }, error.status);
@@ -89,7 +99,10 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonResponse({ error: error.message }, 400);
     }
     if (error instanceof AiProviderError) {
-      return jsonResponse({ error: error.message }, error.status);
+      return jsonResponse({
+        error: error.message,
+        ...(researchLinkResults.length > 0 ? { researchLinkResults } : {}),
+      }, error.status);
     }
     return handleApiError(error);
   }
