@@ -15,6 +15,11 @@ import {
   parseDraftSubmission,
   parseGeneratedArticle,
 } from '../src/lib/blog-content.ts';
+import {
+  articleBodyToDocumentWithMedia,
+  articleDocumentToPlainText,
+  articleDocumentToRichContent,
+} from '../src/lib/article-document.ts';
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AI_GENERATION_TIMEOUT_MS, AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
@@ -339,6 +344,51 @@ test('article media references receive one validated editorial placement each', 
     ...validArticle(),
     mediaPlacements: [{ referenceId: 'unknown-reference', sectionIndex: 0, afterParagraph: 0 }],
   }, [{ id: referenceId, name: 'product.png' }]), InputValidationError);
+});
+
+test('reference images become editable Wix image blocks at AI-selected placements', () => {
+  const referenceId = 'b30d6826-5de3-4ef6-8f4d-e7fa80c05357';
+  const uploadToken = 'c30d6826-5de3-4ef6-8f4d-e7fa80c05358';
+  const body = '## Introduction\n\nOpening paragraph.\n\n## Build a steady routine\n\nFirst section paragraph.\n\nSecond section paragraph.\n\n## Make the room comfortable\n\nAnother paragraph.\n\n## Conclusion\n\nClosing paragraph.';
+  let nextId = 0;
+  const document = articleBodyToDocumentWithMedia(
+    body,
+    [{
+      referenceId,
+      sectionIndex: 0,
+      afterParagraph: 1,
+      caption: 'A finished room.',
+      altText: 'A bright living room with plants.',
+      layout: 'wide',
+      galleryGroup: '',
+      layoutText: '',
+    }],
+    [{
+      referenceId,
+      media: {
+        id: 'wix_original_image_id',
+        url: 'https://static.wixstatic.com/media/wix_original_image_id',
+        name: 'living-room.png',
+        mimeType: 'image/png',
+        uploadToken,
+        width: 1600,
+        height: 1000,
+      },
+    }],
+    () => 'generated-block-' + (++nextId),
+  );
+
+  const imageIndex = document.blocks.findIndex((block) => block.type === 'image');
+  assert.ok(imageIndex > 0);
+  assert.equal(document.blocks[imageIndex - 1]?.type, 'paragraph');
+  assert.equal(document.blocks[imageIndex - 1]?.text, 'First section paragraph.');
+
+  const richContent = articleDocumentToRichContent(document);
+  const imageNode = richContent.nodes.find((node) => node.type === 'IMAGE');
+  assert.ok(imageNode);
+  assert.equal(imageNode.imageData.image.src.id, 'wix_original_image_id');
+  assert.equal(imageNode.imageData.altText, 'A bright living room with plants.');
+  assert.match(articleDocumentToPlainText(document), /\[Image: A bright living room with plants\.\] A finished room\./);
 });
 
 test('Wix Rich Content inserts the original uploaded image at its reviewed placement', () => {

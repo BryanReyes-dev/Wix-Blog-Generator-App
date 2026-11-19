@@ -1,3 +1,5 @@
+import type { MediaPlacement } from "./media-reference-types";
+
 export type TextAlignment = "LEFT" | "CENTER" | "RIGHT" | "JUSTIFY";
 export type ImageAlignment = "LEFT" | "CENTER" | "RIGHT";
 export type ImageWidth = "SMALL" | "CONTENT" | "ORIGINAL" | "FULL_WIDTH";
@@ -367,6 +369,99 @@ export function articleBodyToDocument(body: string, createId: () => string): Art
     blocks.push({ id: createId(), type: "paragraph", text: "", style: { ...DEFAULT_BLOCK_STYLE } });
   }
   return { blocks, appearance: { ...DEFAULT_ARTICLE_APPEARANCE } };
+}
+
+export type ArticleImageAsset = {
+  referenceId: string;
+  media: ArticleMedia;
+};
+
+/**
+ * Turns the AI's image placement instructions into editable image blocks.
+ * The image bytes are uploaded separately; this document stores Wix Media
+ * Manager IDs so the saved Ricos document embeds the original media.
+ */
+export function articleBodyToDocumentWithMedia(
+  body: string,
+  mediaPlacements: MediaPlacement[],
+  mediaAssets: ArticleImageAsset[],
+  createId: () => string,
+): ArticleDocument {
+  const document = articleBodyToDocument(body, createId);
+  if (mediaAssets.length === 0) return document;
+
+  const assetsByReference = new Map<string, ArticleMedia>();
+  for (const asset of mediaAssets) {
+    if (!asset.referenceId || assetsByReference.has(asset.referenceId)) {
+      throw new ArticleDocumentError("Each reference image must have one unique media upload.");
+    }
+    assetsByReference.set(asset.referenceId, asset.media);
+  }
+
+  const headingIndexes = document.blocks.reduce<number[]>((indexes, block, index) => {
+    if (block.type === "heading") indexes.push(index);
+    return indexes;
+  }, []);
+  const insertions = new Map<number, ImageBlock[]>();
+
+  for (const placement of mediaPlacements) {
+    const media = assetsByReference.get(placement.referenceId);
+    if (!media) continue; // Video references can guide the model without becoming image blocks.
+
+    const sectionHeadingIndex = placement.sectionIndex + 1;
+    const headingBlockIndex = headingIndexes[sectionHeadingIndex];
+    if (headingBlockIndex === undefined) {
+      throw new ArticleDocumentError("An image placement points to a section that does not exist in the article.");
+    }
+
+    const sectionEnd = headingIndexes[sectionHeadingIndex + 1] ?? document.blocks.length;
+    const paragraphIndexes: number[] = [];
+    for (let index = headingBlockIndex + 1; index < sectionEnd; index += 1) {
+      if (document.blocks[index]?.type === "paragraph") paragraphIndexes.push(index);
+    }
+
+    let insertAt = headingBlockIndex + 1;
+    if (placement.afterParagraph > 0) {
+      insertAt = paragraphIndexes[placement.afterParagraph - 1] !== undefined
+        ? (paragraphIndexes[placement.afterParagraph - 1] as number) + 1
+        : sectionEnd;
+    }
+
+    const layout = placement.layout ?? "wide";
+    const imageBlock: ImageBlock = {
+      id: createId(),
+      type: "image",
+      media,
+      altText: placement.altText.trim() || media.name,
+      caption: placement.caption.trim(),
+      alignment: layout === "split-left" ? "LEFT" : layout === "split-right" ? "RIGHT" : "CENTER",
+      width: layout === "wide" ? "FULL_WIDTH" : "CONTENT",
+      textWrap: layout === "split-left" || layout === "split-right",
+      borderWidth: 0,
+      borderColor: "#D0D5DD",
+      borderRadius: 0,
+    };
+
+    const existing = insertions.get(insertAt) ?? [];
+    existing.push(imageBlock);
+    insertions.set(insertAt, existing);
+  }
+
+  for (const referenceId of assetsByReference.keys()) {
+    if (!mediaPlacements.some((placement) => placement.referenceId === referenceId)) {
+      throw new ArticleDocumentError("A reference image is missing its generated article placement.");
+    }
+  }
+
+  const blocks: ArticleBlock[] = [];
+  for (let index = 0; index <= document.blocks.length; index += 1) {
+    const images = insertions.get(index);
+    if (images) blocks.push(...images);
+    const block = document.blocks[index];
+    if (block) blocks.push(block);
+  }
+
+  return { ...document, blocks };
 }
 
 export function articleDocumentToPlainText(document: ArticleDocument): string {

@@ -111,11 +111,17 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
       }
 
       const sources = Array.isArray(result.sources) ? result.sources : [];
+      const mediaAssets = visualReferences.mediaReferences.flatMap((reference) =>
+        reference.kind === "image" && reference.articleMedia
+          ? [{ referenceId: reference.id, media: reference.articleMedia }]
+          : [],
+      );
       setResearchLinkResults(Array.isArray(result.researchLinkResults) ? result.researchLinkResults : []);
       setReview({
         article: result.article,
         sources,
         generatedBy: result.generatedBy.memberId,
+        mediaAssets,
       });
 
       const sourceMessage = sources.length

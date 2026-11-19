@@ -3,7 +3,7 @@ import { files } from "@wix/media";
 import { auth } from "@wix/essentials";
 import { handleApiError, jsonResponse, requireApprovedSiteMember } from "../../../../lib/server/access-control";
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -57,7 +57,7 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonResponse({ error: "Use a JPEG, PNG, WebP, or GIF image." }, 415);
     }
     if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
-      return jsonResponse({ error: "Original article images must be 10 MB or smaller. Compress the file and try again." }, 413);
+      return jsonResponse({ error: "Original article images must be 20 MB or smaller. Compress the file and try again." }, 413);
     }
 
     const fileBuffer = await file.arrayBuffer();

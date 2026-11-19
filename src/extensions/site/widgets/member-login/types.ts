@@ -1,3 +1,6 @@
+import type { ArticleMedia } from "../../../../lib/article-document";
+import type { MediaPlacement } from "../../../../lib/media-reference-types";
+
 export type GeneratedArticle = {
   title: string;
   introduction: string;
@@ -5,6 +8,7 @@ export type GeneratedArticle = {
   conclusion: string;
   metaDescription: string;
   seoKeywords: string[];
+  mediaPlacements?: MediaPlacement[];
 };
 
 export type ResearchLink = { id: string; url: string; notes: string };
@@ -36,6 +40,7 @@ export type MediaReference = {
   notes: string;
   frames: MediaFrame[];
   originalBytes: number;
+  articleMedia?: ArticleMedia;
 };
 
 export type MemberIdentity = { memberId: string; displayName: string };
@@ -60,4 +65,5 @@ export type ReviewData = {
   article: GeneratedArticle;
   sources: ResearchSource[];
   generatedBy: string;
+  mediaAssets: Array<{ referenceId: string; media: ArticleMedia }>;
 };

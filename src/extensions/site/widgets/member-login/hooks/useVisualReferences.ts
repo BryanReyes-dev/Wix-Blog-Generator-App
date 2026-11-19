@@ -8,6 +8,7 @@ import {
 } from "../lib/constants";
 import { getMediaKind, imageReference, videoReferenceFrames } from "../lib/media-reference";
 import { makeId } from "../lib/ids";
+import { uploadOriginalImage } from "../lib/article-media-upload";
 import type { MediaReference, StatusKind } from "../types";
 
 type ReportStatus = (message: string, kind?: StatusKind) => void;
@@ -81,6 +82,13 @@ export function useVisualReferences(reportStatus: ReportStatus) {
             continue;
           }
 
+          const articleMedia = kind === "image"
+            ? await (async () => {
+                reportStatus("Uploading the original " + file.name + " to Wix Media Manager…");
+                return uploadOriginalImage(file);
+              })()
+            : undefined;
+
           nextReferences.push({
             id: makeId(),
             name: file.name.slice(0, 160),
@@ -88,9 +96,12 @@ export function useVisualReferences(reportStatus: ReportStatus) {
             notes: "",
             frames,
             originalBytes: file.size,
+            ...(articleMedia ? { articleMedia } : {}),
           });
           setMediaReferences([...nextReferences]);
-          reportStatus("Attached " + file.name + " as a visual reference.", "success");
+          reportStatus(kind === "image"
+            ? "Attached " + file.name + ". The original image is ready to be embedded in the Wix Blog article."
+            : "Attached " + file.name + " as visual context. Video frames guide the AI but are not embedded as a video.", "success");
         } catch (error) {
           reportStatus(
             error instanceof Error ? error.message : "Could not read " + file.name + ".",
