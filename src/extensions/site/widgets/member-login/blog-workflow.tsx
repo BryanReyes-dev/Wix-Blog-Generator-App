@@ -82,7 +82,8 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
         instructions: preferences.instructions,
         seoKeywords: preferences.keywords,
         researchLinks: linksForGeneration,
-        mediaReferences: visualReferences.mediaReferences.map(({ name, kind, notes, frames }) => ({
+        mediaReferences: visualReferences.mediaReferences.map(({ id, name, kind, notes, frames }) => ({
+          id,
           name,
           kind,
           notes,

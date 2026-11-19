@@ -688,7 +688,6 @@ export function bodyToRichContent(
       continue;
     }
 
-    flushStepList();
     flushList();
     flushQuote();
     paragraphLines.push(trimmed);

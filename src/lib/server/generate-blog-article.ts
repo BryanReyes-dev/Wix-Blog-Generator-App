@@ -208,7 +208,7 @@ export async function generateBlogArticle(
             } : {}),
           })
         : JSON.stringify(brief),
-      maxOutputTokens: config.generateText ? 3_500 : 6_000,
+      maxOutputTokens: config.mediaReferences?.length ? 6_000 : 3_500,
       abortSignal: AbortSignal.timeout(45_000),
       mediaReferences: config.mediaReferences,
     });
