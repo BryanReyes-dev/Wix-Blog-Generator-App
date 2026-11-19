@@ -20,7 +20,9 @@ export default function MediaReferenceCard({ reference, onNoteChange, onRemove }
         <div className="grid min-w-0 gap-1">
           <strong className="break-words text-[13px] text-[var(--text)]">{reference.name}</strong>
           <small className="break-words text-xs leading-5 text-[var(--text-soft)]">
-            {(reference.kind === "video" ? "Video · " + reference.frames.length + " sampled frames" : "Image reference") +
+            {(reference.kind === "video"
+              ? "Video · " + reference.frames.length + " sampled frames · visual context only"
+              : "Image · Original uploaded to Wix Media Manager for article placement") +
               " · " + formatBytes(reference.originalBytes)}
           </small>
         </div>
