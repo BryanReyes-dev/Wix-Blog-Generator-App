@@ -281,7 +281,7 @@ export function parseResearchLinkEntries(value: unknown): ResearchLinkEntry[] {
   if (value === undefined || value === null || value === '') return [];
 
   const entries: unknown[] = typeof value === 'string'
-    ? value.split(/\\r?\\n/)
+    ? value.split(/\r?\n/)
     : Array.isArray(value)
       ? value
       : (() => { throw new ResearchSourceError('Research links must be a list of URLs.', 400); })();
