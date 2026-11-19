@@ -19,7 +19,7 @@ import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AI_GENERATION_TIMEOUT_MS, AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
-import { loadResearchSources, loadResearchSourcesIndividually } from '../src/lib/server/research-sources.ts';
+import { loadResearchSources, loadResearchSourcesIndividually, parseResearchLinkEntries } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
@@ -558,6 +558,18 @@ test('draft submission carries validated article design and section patterns', (
   assert.equal(submission.featured, true);
 });
 
+
+
+test('research link parsing preserves row IDs and defers URL errors to individual checks', () => {
+  const links = parseResearchLinkEntries([
+    { id: 'row-invalid', url: 'not-a-url', notes: '' },
+    { id: 'row-valid', url: 'https://example.org/article', notes: 'Use this page.' },
+  ]);
+
+  assert.deepEqual(links.map((link) => link.id), ['row-invalid', 'row-valid']);
+  assert.equal(links[0].url, 'not-a-url');
+  assert.equal(links[1].notes, 'Use this page.');
+});
 
 test('research links are checked independently and successful sources survive sibling failures', async () => {
   const html = '<html><head><title>Working Research Page</title></head><body><main><p>This is a sufficiently long public article excerpt for the independent research link test.</p></main></body></html>';
