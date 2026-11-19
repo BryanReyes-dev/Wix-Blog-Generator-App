@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import styles from "../ai-blog-generator.module.css";
+import styles from "../../../../../components/dashboard/AiBlogGeneratorDashboard.module.css";
 import { MEMBER_PAGE_SIZE } from "../hooks/useAdminDashboard";
 import type { MemberRow } from "../types";
 
