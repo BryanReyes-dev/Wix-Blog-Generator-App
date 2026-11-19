@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import { httpClient } from '@wix/essentials';
+import { apiFetch } from '../client/api';
 import type { GeneratedArticle } from '../blog-content';
 
-const API_BASE_URL = new URL(import.meta.url).origin;
+
 
 export type BlogBriefInput = {
   topic: string;
@@ -25,7 +25,7 @@ type DraftInput = {
 type ApiError = { error?: string };
 
 async function postWorkflowJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await httpClient.fetchWithAuth(API_BASE_URL + path, {
+  const response = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

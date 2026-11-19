@@ -1,9 +1,10 @@
 import { useCallback } from 'react';
-import { httpClient } from '@wix/essentials';
+import { apiFetch } from '../client/api';
+
 import { location } from '@wix/site-location';
 import { authentication, currentMember } from '@wix/site-members';
 
-const API_BASE_URL = new URL(import.meta.url).origin;
+
 
 export type SiteMemberAccess =
   | { state: 'signed-out'; memberExists: false }
@@ -28,7 +29,7 @@ export function useSiteMemberAccess() {
     if (!member) return { state: 'signed-out', memberExists: false };
 
     try {
-      const response = await httpClient.fetchWithAuth(API_BASE_URL + '/api/workflow-access');
+      const response = await apiFetch('/api/workflow-access');
       if (!response.ok) return { state: 'unavailable', memberExists: true };
 
       const result: unknown = await response.json();
