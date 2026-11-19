@@ -192,7 +192,7 @@ test('Wix AI generation uses the managed provider and requests a structured arti
       model: 'gpt-5-mini',
       generateStructuredOutput: async (args) => {
         callArgs = args;
-        return { output: validArticle() };
+        return { output: { ...validArticle(), mediaPlacements: [] } };
       },
     },
   );
