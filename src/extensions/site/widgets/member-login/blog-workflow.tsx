@@ -4,7 +4,7 @@ import ArticleBriefForm from "./components/ArticleBriefForm";
 import StatusBanner from "./components/StatusBanner";
 import WorkflowHeader from "./components/WorkflowHeader";
 import { MAX_MEDIA_REFERENCE_CHARS, MAX_RESEARCH_LINKS } from "./lib/constants";
-import { postJson } from "./lib/api-client";
+import { postJson, WorkflowApiError } from "./lib/api-client";
 import { cx, themeTokens } from "./lib/styles";
 import { useArticlePreferences } from "./hooks/useArticlePreferences";
 import { useVisualReferences } from "./hooks/useVisualReferences";
@@ -14,6 +14,7 @@ import type {
   MemberIdentity,
   ReviewData,
   ResearchSource,
+  ResearchLinkCheck,
   StatusKind,
   WorkflowStatus,
 } from "./types";
@@ -28,6 +29,7 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
   const [review, setReview] = useState<ReviewData | null>(null);
   const [status, setStatus] = useState<WorkflowStatus>({ message: "", kind: "info" });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [researchLinkResults, setResearchLinkResults] = useState<ResearchLinkCheck[]>([]);
 
   const reportStatus = (message: string, kind: StatusKind = "info") => {
     setStatus({ message, kind });
@@ -48,7 +50,7 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
     }
 
     const linksForGeneration = preferences.researchLinks
-      .map((link) => ({ url: link.url.trim(), notes: link.notes.trim() }))
+      .map((link) => ({ id: link.id, url: link.url.trim(), notes: link.notes.trim() }))
       .filter((link) => link.url);
 
     if (linksForGeneration.length > MAX_RESEARCH_LINKS) {
@@ -68,12 +70,14 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
     preferences.saveNow(linksForGeneration);
     setIsGenerating(true);
     setReview(null);
-    reportStatus("Reading sources and generating a structured article…");
+    setResearchLinkResults([]);
+    reportStatus("Checking each research link, then generating your article. Wix AI can take up to 5 minutes; keep this page open.");
 
     try {
       const result = await postJson<ApiSuccess<{
         article: GeneratedArticle;
         sources: ResearchSource[];
+        researchLinkResults?: ResearchLinkCheck[];
         generatedBy: { memberId: string };
       }>>("/api/workflow/generate", {
         topic: preferences.topic,
@@ -107,6 +111,7 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
       }
 
       const sources = Array.isArray(result.sources) ? result.sources : [];
+      setResearchLinkResults(Array.isArray(result.researchLinkResults) ? result.researchLinkResults : []);
       setReview({
         article: result.article,
         sources,
@@ -126,10 +131,21 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
         "success",
       );
     } catch (error) {
-      reportStatus(
-        error instanceof Error ? error.message : "Article generation failed. Please try again.",
-        "error",
-      );
+      if (error instanceof WorkflowApiError && error.researchLinkResults.length > 0) {
+        setResearchLinkResults(error.researchLinkResults);
+        const failedCount = error.researchLinkResults.filter((result) => result.status === "error").length;
+        reportStatus(
+          failedCount > 0
+            ? failedCount + " research link(s) could not be used. The affected rows are highlighted below; replace or remove those links and try again."
+            : error.message,
+          "error",
+        );
+      } else {
+        reportStatus(
+          error instanceof Error ? error.message : "Article generation failed. Please try again.",
+          "error",
+        );
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -161,9 +177,18 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
         keywords={preferences.keywords}
         onKeywordsChange={preferences.setKeywords}
         researchLinks={preferences.researchLinks}
-        onResearchLinkChange={preferences.updateResearchLink}
+        researchLinkResults={researchLinkResults}
+        onResearchLinkChange={(id, field, value) => {
+          preferences.updateResearchLink(id, field, value);
+          if (field === "url") {
+            setResearchLinkResults((current) => current.filter((result) => result.id !== id));
+          }
+        }}
         onAddResearchLink={preferences.addResearchLink}
-        onRemoveResearchLink={preferences.removeResearchLink}
+        onRemoveResearchLink={(id) => {
+          preferences.removeResearchLink(id);
+          setResearchLinkResults((current) => current.filter((result) => result.id !== id));
+        }}
         mediaReferences={visualReferences.mediaReferences}
         onMediaFilesChange={visualReferences.addFiles}
         onMediaReferenceNoteChange={visualReferences.updateNote}
