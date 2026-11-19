@@ -1,10 +1,9 @@
-import { httpClient } from "@wix/essentials";
+import { apiFetch } from "../../../../../lib/client/api";
 import type { ApiError } from "../types";
 
-const API_BASE_URL = new URL(import.meta.url).origin;
 
 export async function postJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await httpClient.fetchWithAuth(API_BASE_URL + path, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
