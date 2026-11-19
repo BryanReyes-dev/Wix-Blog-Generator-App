@@ -28,7 +28,11 @@ Generation alone does not create a Wix Blog item. The app does not publish or sc
 
 Site widgets and dashboard extensions call this app's own HTTP endpoints through the shared `apiFetch()` helper in `src/lib/client/api.ts`. It uses Wix's `httpClient.fetchWithAuth()` and derives the app backend origin from the module URL.
 
-The application does not maintain a CORS allowlist for each customer website. Do not add customer site domains to environment configuration. Keep the Wix authenticated request pattern and enforce access on the server:
+**Production does not use a per-customer-site CORS allowlist.** The app's endpoints are part of the Wix-hosted app backend, and frontend extensions call them using Wix's authenticated-request pattern. Installing the app on another customer site does not require adding that site's domain to CORS configuration.
+
+Local development is different: the widget runs inside a Wix-hosted development-site preview, while `wix dev` serves the app and API from `localhost:4321`. The browser therefore treats the request as cross-origin. The `vite.server.cors` rule in `astro.config.mjs` is a **local development-server setting only**; it permits HTTPS Wix development-preview hostnames ending in `.wixdev-sites.org`. It is not included as a production CORS policy. Do not add individual customer domains or production site domains to this rule.
+
+Keep the Wix authenticated request pattern and enforce access on the server:
 
 - Validate the active Wix token.
 - Require a site-member identity for member workflows.
