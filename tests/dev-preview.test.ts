@@ -39,9 +39,10 @@ describe('development UI previews', () => {
 
   it('renders the article editor with sample content and metadata', () => {
     const markup = renderToStaticMarkup(createElement(ArticleReviewEditorPreview));
-    expect(markup).toContain('Review and edit');
+    expect(markup).toContain('Review your story');
     expect(markup).toContain('A Practical Guide to Better Sleep');
-    expect(markup).toContain('Suggested SEO keywords');
+    expect(markup).toContain('Search metadata');
+    expect(markup).toContain('Create unpublished draft');
   });
 
   it('generates a deterministic mock article from the submitted brief', async () => {
