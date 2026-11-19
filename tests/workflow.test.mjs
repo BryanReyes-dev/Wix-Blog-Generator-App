@@ -202,8 +202,8 @@ test('Wix AI generation uses the managed provider and requests a structured arti
   assert.match(callArgs.system, /no more than 5 strings/);
   assert.match(callArgs.system, /title 1-200 characters/);
   assert.match(callArgs.system, /under 30000 characters/);
-  assert.equal(callArgs.schema.safeParse(validArticle()).success, true);
-  assert.equal(callArgs.schema.safeParse({ ...validArticle(), unexpected: true }).success, false);
+  assert.equal(callArgs.schema.safeParse({ ...validArticle(), mediaPlacements: [] }).success, true);
+  assert.equal(callArgs.schema.safeParse({ ...validArticle(), mediaPlacements: [], unexpected: true }).success, false);
   assert.equal(callArgs.prompt, JSON.stringify({
     topic: 'sleep', audience: 'adults', tone: 'practical', instructions: 'Keep it useful.', seoKeywords: [],
   }));
