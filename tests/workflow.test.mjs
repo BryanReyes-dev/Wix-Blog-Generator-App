@@ -596,7 +596,7 @@ test('research links are checked independently and successful sources survive si
   assert.match(result.checks[2].message, /public website/i);
   assert.equal(result.sources.length, 1);
   assert.equal(result.sources[0].id, 'S2');
-  assert.deepEqual(requests, ['blocked.example.org', 'working.example.org']);
+  assert.deepEqual(requests.sort(), ['blocked.example.org', 'working.example.org']);
 });
 
 test('duplicate research URLs are reported against the later row only', async () => {
