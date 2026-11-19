@@ -16,10 +16,10 @@ import {
   parseGeneratedArticle,
 } from '../src/lib/blog-content.ts';
 import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
-import { AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
+import { AI_GENERATION_TIMEOUT_MS, AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
-import { loadResearchSources } from '../src/lib/server/research-sources.ts';
+import { loadResearchSources, loadResearchSourcesIndividually } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
@@ -556,4 +556,69 @@ test('draft submission carries validated article design and section patterns', (
   assert.equal(submission.seoSlug, 'a-practical-sleep-guide');
   assert.deepEqual(submission.hashtags, ['Sleep', 'wellness']);
   assert.equal(submission.featured, true);
+});
+
+
+test('research links are checked independently and successful sources survive sibling failures', async () => {
+  const html = '<html><head><title>Working Research Page</title></head><body><main><p>This is a sufficiently long public article excerpt for the independent research link test.</p></main></body></html>';
+  const requests = [];
+  const links = [
+    { id: 'blocked-source', url: 'https://blocked.example.org/article', notes: 'Check the source status.' },
+    { id: 'working-source', url: 'https://working.example.org/article', notes: 'Use this source.' },
+    { id: 'private-host', url: 'http://localhost/private', notes: '' },
+  ];
+
+  const result = await loadResearchSourcesIndividually(links, {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async (url) => {
+      const hostname = new URL(url).hostname;
+      requests.push(hostname);
+      if (hostname === 'blocked.example.org') {
+        return new Response('Forbidden', { status: 403 });
+      }
+      return new Response(html, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    },
+    now: () => new Date('2026-11-19T12:00:00.000Z'),
+  });
+
+  assert.equal(result.checks.length, 3);
+  assert.deepEqual(result.checks.map((check) => check.id), [
+    'blocked-source',
+    'working-source',
+    'private-host',
+  ]);
+  assert.deepEqual(result.checks.map((check) => check.status), ['error', 'success', 'error']);
+  assert.match(result.checks[0].message, /blocked automated access.*403/i);
+  assert.equal(result.checks[1].title, 'Working Research Page');
+  assert.match(result.checks[2].message, /public website/i);
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0].id, 'S2');
+  assert.deepEqual(requests, ['blocked.example.org', 'working.example.org']);
+});
+
+test('duplicate research URLs are reported against the later row only', async () => {
+  const html = '<html><head><title>One Working Page</title></head><body><main><p>This excerpt is long enough to use as a valid research source in the duplicate check test.</p></main></body></html>';
+  let requests = 0;
+  const result = await loadResearchSourcesIndividually([
+    { id: 'first', url: 'https://public.example.org/article', notes: '' },
+    { id: 'duplicate', url: 'https://public.example.org/article#top', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => {
+      requests += 1;
+      return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+    },
+  });
+
+  assert.deepEqual(result.checks.map((check) => check.status), ['success', 'error']);
+  assert.match(result.checks[1].message, /duplicates an earlier research link/i);
+  assert.equal(result.sources.length, 1);
+  assert.equal(requests, 1);
+});
+
+test('Wix AI generation is configured to wait five minutes before timing out', () => {
+  assert.equal(AI_GENERATION_TIMEOUT_MS, 5 * 60 * 1_000);
 });
