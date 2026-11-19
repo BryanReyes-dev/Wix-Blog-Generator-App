@@ -57,7 +57,7 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonResponse({ error: "Use a JPEG, PNG, WebP, or GIF image." }, 415);
     }
     if (file.size <= 0 || file.size > MAX_UPLOAD_BYTES) {
-      return jsonResponse({ error: "Original article images must be 10 MB or smaller. Compress the file and try again." }, 413);
+      return jsonResponse({ error: "Original article images must be 20 MB or smaller. Compress the file and try again." }, 413);
     }
 
     const fileBuffer = await file.arrayBuffer();
