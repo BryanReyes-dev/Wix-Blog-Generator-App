@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { httpClient } from "@wix/essentials";
 import { location } from "@wix/site-location";
 import { authentication, currentMember } from "@wix/site-members";
+import { apiFetch } from "../../../../lib/client/api";
 import "./../../../../styles/tailwind.css";
 import BlogWorkflow from "./blog-workflow";
 import AccessPanel, { BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from "./components/AccessPanel";
@@ -37,8 +37,7 @@ async function checkAccess(): Promise<AccessCheck> {
   if (!member) return { state: "signed-out", memberExists: false };
 
   try {
-    const apiUrl = new URL(import.meta.url).origin + "/api/workflow-access";
-    const response = await httpClient.fetchWithAuth(apiUrl);
+    const response = await apiFetch("/api/workflow-access");
     if (!response.ok) {
       let reason = "Approval API returned HTTP " + response.status + ".";
       try {
