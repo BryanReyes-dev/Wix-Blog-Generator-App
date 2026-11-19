@@ -630,8 +630,9 @@ export function bodyToRichContent(
   };
 
   const flushStructuredBlocks = () => {
+    // A blank line separates paragraphs, but step-layout paragraphs belong
+    // to the same ordered list until the section or layout changes.
     flushParagraph();
-    flushStepList();
     flushList();
     flushQuote();
   };
