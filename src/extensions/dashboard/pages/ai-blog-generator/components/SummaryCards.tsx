@@ -1,4 +1,4 @@
-import styles from "../ai-blog-generator.module.css";
+import styles from "../../../../../components/dashboard/AiBlogGeneratorDashboard.module.css";
 import type { WixBlogStatus } from "../types";
 
 type Props = {
