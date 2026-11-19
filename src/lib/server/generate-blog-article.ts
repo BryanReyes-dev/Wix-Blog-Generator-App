@@ -10,6 +10,8 @@ import type { ResearchSource } from './research-sources';
 import type { MediaReference } from './media-references';
 import { ARTICLE_MEDIA_LAYOUTS, ARTICLE_SECTION_LAYOUTS, DEFAULT_ARTICLE_DESIGN, getArticleTemplate, type ArticleDesignSettings } from '../article-layout.ts';
 
+export const AI_GENERATION_TIMEOUT_MS = 5 * 60 * 1_000;
+
 export class AiProviderError extends Error {
   public readonly status: number;
 
@@ -209,7 +211,7 @@ export async function generateBlogArticle(
           })
         : JSON.stringify(brief),
       maxOutputTokens: config.mediaReferences?.length ? 6_000 : 3_500,
-      abortSignal: AbortSignal.timeout(45_000),
+      abortSignal: AbortSignal.timeout(AI_GENERATION_TIMEOUT_MS),
       mediaReferences: config.mediaReferences,
     });
 
@@ -217,7 +219,16 @@ export async function generateBlogArticle(
   } catch (error) {
     if (error instanceof AiProviderError) throw error;
     if (isTimeout(error)) {
-      throw new AiProviderError('Wix AI generation timed out. Please try again.', 504);
+      console.warn('[workflow/generate] Wix AI generation exceeded its five-minute timeout.', {
+        timeoutMs: AI_GENERATION_TIMEOUT_MS,
+        model: modelName,
+        hasResearchSources: Boolean(config.researchSources?.length),
+        hasMediaReferences: Boolean(config.mediaReferences?.length),
+      });
+      throw new AiProviderError(
+        'Wix AI did not finish within 5 minutes. The request was stopped; try again with a shorter brief or fewer visual references.',
+        504,
+      );
     }
     if (getFinishReason(error) === 'length') {
       throw new AiProviderError(
