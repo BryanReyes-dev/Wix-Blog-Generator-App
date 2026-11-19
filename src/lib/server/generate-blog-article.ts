@@ -155,6 +155,7 @@ export async function generateBlogArticle(
       ? async (args) => {
           const result = await config.generateText?.({
             model: args.model,
+            schema: args.schema,
             system: args.system,
             prompt: args.prompt,
             maxOutputTokens: args.maxOutputTokens,
