@@ -9,6 +9,14 @@ export type GeneratedArticle = {
 
 export type ResearchLink = { id: string; url: string; notes: string };
 
+export type ResearchLinkCheck = {
+  id: string;
+  url: string;
+  status: "success" | "error";
+  title?: string;
+  message?: string;
+};
+
 export type ResearchSource = {
   id: string;
   title: string;
