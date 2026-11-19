@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { httpClient } from "@wix/essentials";
+import { apiFetch } from "../client/api";
 import type { GeneratedArticle } from "../blog-content";
 import type { ArticleDesignSettings, ArticleSectionLayout } from "../article-layout";
 import { createMockDraft, generateMockArticle } from "../dev/mock-blog-workflow";
@@ -12,8 +12,6 @@ import type {
   ResearchSource,
   UploadedMedia,
 } from "../media-reference-types";
-
-
 
 export type BlogBriefInput = {
   topic: string;
@@ -37,7 +35,7 @@ type ApiError = { error?: string };
 type WorkflowMode = "live" | "mock";
 
 async function postWorkflowJson<T>(path: string, payload: unknown): Promise<T> {
-  const response = await httpClient.fetchWithAuth(API_BASE_URL + path, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
