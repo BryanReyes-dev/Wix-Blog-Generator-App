@@ -69,12 +69,6 @@ export function useVisualReferences(reportStatus: ReportStatus) {
           const frames = kind === "image"
             ? [await imageReference(file)]
             : await videoReferenceFrames(file, remainingFrames);
-          const articleMedia = kind === "image"
-            ? await (async () => {
-                reportStatus("Uploading the original " + file.name + " to Wix Media Manager…");
-                return uploadOriginalImage(file);
-              })()
-            : undefined;
           const currentEncodedChars = nextReferences.reduce((total, reference) =>
             total + reference.frames.reduce((frameTotal, frame) => frameTotal + frame.dataUrl.length, 0),
           0);
@@ -87,6 +81,13 @@ export function useVisualReferences(reportStatus: ReportStatus) {
             reportStatus("Reference images are too large together. Remove a file or use smaller files.", "error");
             continue;
           }
+
+          const articleMedia = kind === "image"
+            ? await (async () => {
+                reportStatus("Uploading the original " + file.name + " to Wix Media Manager…");
+                return uploadOriginalImage(file);
+              })()
+            : undefined;
 
           nextReferences.push({
             id: makeId(),
