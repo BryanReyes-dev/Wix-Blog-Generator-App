@@ -545,9 +545,15 @@ test('draft submission carries validated article design and section patterns', (
     body: '## Introduction\n\nOpening.\n\n## A section\n\nBody.',
     metaDescription: validArticle().metaDescription,
     seoKeywords: validArticle().seoKeywords,
+    seoSlug: 'a-practical-sleep-guide',
+    hashtags: ['#Sleep', 'wellness', 'Sleep'],
+    featured: true,
     design: { templateId: 'visual', accentColor: '#B84B32', density: 'visual-rich' },
     sectionLayouts: ['steps'],
   });
   assert.equal(submission.design.templateId, 'visual');
   assert.deepEqual(submission.sectionLayouts, ['steps']);
+  assert.equal(submission.seoSlug, 'a-practical-sleep-guide');
+  assert.deepEqual(submission.hashtags, ['Sleep', 'wellness']);
+  assert.equal(submission.featured, true);
 });
