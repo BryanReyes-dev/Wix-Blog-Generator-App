@@ -47,11 +47,12 @@ export async function uploadOriginalImage(file: File): Promise<ArticleMedia> {
   }
 
   const dimensions = await imageDimensions(file);
-  const form = new FormData();
-  form.set("file", file);
-  const uploadResponse = await apiFetch("/api/workflow/media/upload", {
+  const uploadUrl = new URL("/api/workflow/media/upload", window.location.origin);
+  uploadUrl.searchParams.set("fileName", file.name);
+  const uploadResponse = await apiFetch(uploadUrl.pathname + uploadUrl.search, {
     method: "POST",
-    body: form,
+    headers: { "Content-Type": file.type },
+    body: file,
   });
   const uploadPayload = await readJson(uploadResponse);
   if (!uploadResponse.ok) {
