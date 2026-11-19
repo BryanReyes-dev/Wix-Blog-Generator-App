@@ -534,6 +534,7 @@ export function bodyToRichContent(
 ): WixRichContent {
   const contentBlocks: RichTextNode[] = [];
   let pendingStepItems: RichTextNode[] = [];
+  let pendingStepSection: number | null = null;
   const flushStepList = () => {
     if (pendingStepItems.length === 0) return;
     contentBlocks.push({
@@ -542,6 +543,7 @@ export function bodyToRichContent(
       orderedListData: { indentation: 0 },
     });
     pendingStepItems = [];
+    pendingStepSection = null;
   };
   const assetByReference = new Map(mediaAssets.map((asset) => [asset.referenceId, asset] as const));
   const placementByReference = new Map(placements.map((placement) => [placement.referenceId, placement] as const));
@@ -596,6 +598,10 @@ export function bodyToRichContent(
         blockquoteData: { indentation: 1 },
       });
     } else if (sectionLayout === 'steps') {
+      if (pendingStepItems.length > 0 && pendingStepSection !== currentSection) {
+        flushStepList();
+      }
+      pendingStepSection = currentSection;
       pendingStepItems.push({ type: 'LIST_ITEM', nodes: [paragraph] });
     } else {
       flushStepList();
