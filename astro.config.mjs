@@ -11,14 +11,14 @@ export default defineConfig({
   security: { checkOrigin: false },
   devToolbar: { enabled: false },
 
-  // The Wix-hosted preview calls the local Astro API at localhost:4321.
-  // Vite's default dev CORS policy only permits localhost origins, not the
-  // Wix preview origin, so explicitly allow this development site.
-  // This is a Vite dev-server setting; it does not add production CORS.
+  // During local development, the Wix preview page calls this API at
+  // localhost:4321. Vite's default CORS policy only permits localhost
+  // origins, so allow Wix development-site preview hosts here.
+  // This Vite dev-server setting is not part of the deployed app.
   vite: {
     server: {
       cors: {
-        origin: 'https://dev-sitex1487338744.wixdev-sites.org',
+        origin: /^https:\/\/[a-z0-9-]+\.wixdev-sites\.org$/i,
         methods: ['GET', 'POST', 'OPTIONS'],
         allowedHeaders: ['Authorization', 'Content-Type', 'X-Wix-Linguist'],
       },
