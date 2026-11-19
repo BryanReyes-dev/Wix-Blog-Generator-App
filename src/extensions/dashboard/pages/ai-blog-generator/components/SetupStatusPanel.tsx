@@ -1,4 +1,4 @@
-import styles from "../ai-blog-generator.module.css";
+import styles from "../../../../../components/dashboard/AiBlogGeneratorDashboard.module.css";
 
 const APP_ID = "012509d2-64ed-4670-bc27-8299e942673f";
 const APP_INSTALLER_URL = `https://wix.com/app-installer?appId=${APP_ID}`;
@@ -14,7 +14,6 @@ type Props = {
   accessStorageAvailable: boolean;
   blogStatusCopy: string;
   blogStatusDot: string;
-  blogInventoryDiagnostic: string;
   onRecheck: () => void;
 };
 
@@ -29,7 +28,6 @@ export default function SetupStatusPanel({
   accessStorageAvailable,
   blogStatusCopy,
   blogStatusDot,
-  blogInventoryDiagnostic,
   onRecheck,
 }: Props) {
   return (
