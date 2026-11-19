@@ -44,6 +44,9 @@ export type DraftSubmission = {
   body: string;
   metaDescription: string;
   seoKeywords: string[];
+  seoSlug?: string;
+  hashtags: string[];
+  featured: boolean;
   mediaPlacements: MediaPlacement[];
   sectionLayouts: ArticleSectionLayout[];
   design: ArticleDesignSettings;
@@ -62,7 +65,7 @@ type RichTextDecoration =
     };
 
 type RichTextNode = {
-  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION' | 'TABLE' | 'TABLE_ROW' | 'TABLE_CELL' | 'GALLERY' | 'BLOCKQUOTE' | 'ORDERED_LIST' | 'LIST_ITEM';
+  type: 'TEXT' | 'PARAGRAPH' | 'HEADING' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'CAPTION' | 'TABLE' | 'TABLE_ROW' | 'TABLE_CELL' | 'GALLERY' | 'BLOCKQUOTE' | 'ORDERED_LIST' | 'BULLETED_LIST' | 'LIST_ITEM';
   nodes?: RichTextNode[];
   textData?: { text: string; decorations: RichTextDecoration[] };
   paragraphData?: { textStyle: { textAlignment: 'AUTO' } };
@@ -87,6 +90,7 @@ type RichTextNode = {
   tableData?: { dimensions: { colsWidthRatio: number[]; colsMinWidth: number[]; rowsHeight: number[] } };
   blockquoteData?: { indentation: number };
   orderedListData?: { indentation: number };
+  bulletedListData?: Record<string, never>;
   galleryData?: {
     containerData: { width: { size: 'CONTENT' }; alignment: 'CENTER'; textWrap: true };
     items: Array<{ image: { media: { src: { id: string }; width: number; height: number } } }>;
@@ -311,6 +315,32 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     };
   });
 
+  const rawSeoSlug = input.seoSlug;
+  let seoSlug: string | undefined;
+  if (rawSeoSlug !== undefined) {
+    if (typeof rawSeoSlug !== 'string') {
+      throw new InputValidationError('The SEO slug must be text.');
+    }
+    const normalizedSlug = rawSeoSlug.trim().toLowerCase();
+    if (normalizedSlug && (normalizedSlug.length > 100 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedSlug))) {
+      throw new InputValidationError('Use a URL-safe SEO slug with letters, numbers, and hyphens.');
+    }
+    if (normalizedSlug) seoSlug = normalizedSlug;
+  }
+
+  const rawHashtags = input.hashtags === undefined ? [] : input.hashtags;
+  if (!Array.isArray(rawHashtags) || rawHashtags.length > 100) {
+    throw new InputValidationError('Use no more than 100 article hashtags.');
+  }
+  const hashtags = Array.from(new Set(rawHashtags.map((tag, index) =>
+    requiredText(typeof tag === 'string' ? tag.replace(/^#/, '') : tag, `Hashtag ${index + 1}`, 100),
+  )));
+
+  const featured = input.featured === undefined ? false : input.featured;
+  if (typeof featured !== 'boolean') {
+    throw new InputValidationError('The featured setting must be true or false.');
+  }
+
   const rawSectionLayouts = input.sectionLayouts === undefined ? [] : input.sectionLayouts;
   if (!Array.isArray(rawSectionLayouts) || rawSectionLayouts.length > 8) {
     throw new InputValidationError('The draft section layouts are invalid.');
@@ -330,6 +360,9 @@ export function parseDraftSubmission(value: unknown): DraftSubmission {
     body: requiredText(input.body, 'Article content', BLOG_BODY_MAX_LENGTH),
     metaDescription: requiredText(input.metaDescription, 'Meta description', BLOG_EXCERPT_MAX_LENGTH),
     seoKeywords: keywordList(input.seoKeywords, 'SEO keyword'),
+    ...(seoSlug ? { seoSlug } : {}),
+    hashtags,
+    featured,
     mediaPlacements,
     sectionLayouts,
     design,
@@ -573,6 +606,36 @@ export function bodyToRichContent(
     insertAt(currentSection, paragraphCount);
   };
 
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    contentBlocks.push({
+      type: 'BULLETED_LIST',
+      nodes: listItems.map((item) => ({
+        type: 'LIST_ITEM',
+        nodes: [paragraphNode(item, sources)],
+      })),
+      bulletedListData: {},
+    });
+    listItems = [];
+  };
+
+  const flushQuote = () => {
+    if (quoteLines.length === 0) return;
+    contentBlocks.push({
+      type: 'BLOCKQUOTE',
+      nodes: [paragraphNode(quoteLines.join(' '), sources)],
+      blockquoteData: { indentation: 1 },
+    });
+    quoteLines = [];
+  };
+
+  const flushStructuredBlocks = () => {
+    flushParagraph();
+    flushStepList();
+    flushList();
+    flushQuote();
+  };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) {
@@ -584,6 +647,8 @@ export function bodyToRichContent(
     if (headingMatch) {
       flushParagraph();
       flushStepList();
+      flushList();
+      flushQuote();
       const hashes = headingMatch[1] ?? '';
       const heading = headingMatch[2]?.trim() ?? '';
       const normalizedHeading = heading.toLowerCase();
@@ -607,6 +672,7 @@ export function bodyToRichContent(
     const listMatch = /^[-*]\s+(.+)$/.exec(trimmed);
     if (listMatch) {
       flushParagraph();
+      flushStepList();
       flushQuote();
       listItems.push(listMatch[1] ?? '');
       continue;
@@ -615,11 +681,13 @@ export function bodyToRichContent(
     const quoteMatch = /^>\s?(.+)$/.exec(trimmed);
     if (quoteMatch) {
       flushParagraph();
+      flushStepList();
       flushList();
       quoteLines.push(quoteMatch[1] ?? '');
       continue;
     }
 
+    flushStepList();
     flushList();
     flushQuote();
     paragraphLines.push(trimmed);
@@ -627,6 +695,8 @@ export function bodyToRichContent(
 
   flushParagraph();
   flushStepList();
+  flushList();
+  flushQuote();
 
   // If a user removes or renames the target heading while editing, never silently drop an attachment.
   for (const asset of mediaAssets) {
