@@ -83,7 +83,11 @@ export async function runTestSuite(
         child = spawnCommand(command, args, {
           env,
           stdio: "inherit",
+<<<<<<< HEAD
           shell: useWindowsShell,
+=======
+          shell: platform === "win32" && command === "vp",
+>>>>>>> origin/feat/editorial-workspace-and-media
         });
       } catch (error) {
         writeErr(

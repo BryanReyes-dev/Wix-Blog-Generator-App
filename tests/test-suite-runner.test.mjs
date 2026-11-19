@@ -100,9 +100,15 @@ test("the all suite runs runner, auth, and workflow tests in order", async () =>
     ],
   );
   assert.deepEqual(
+<<<<<<< HEAD
     calls.map((call) => call.options.shell),
     [false, true, false],
   );
+=======
+  calls.map((call) => call.options.shell),
+  [false, true, false],
+);
+>>>>>>> origin/feat/editorial-workspace-and-media
   assert.ok(calls.every((call) => call.options.stdio === "inherit"));
 });
 

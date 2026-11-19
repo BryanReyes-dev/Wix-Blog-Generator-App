@@ -1,12 +1,74 @@
 import type { APIRoute } from 'astro';
 import { appInstances } from '@wix/app-management';
 import { draftPosts } from '@wix/blog';
+import { files } from '@wix/media';
 import { auth } from '@wix/essentials';
 import { handleApiError, jsonResponse, requireApprovedSiteMember } from '../../../lib/server/access-control';
 import { ApiError } from '../../../lib/server/authorization-core';
-import { bodyToRichContent, InputValidationError, parseDraftSubmission } from '../../../lib/blog-content';
+import { bodyToRichContent, InputValidationError, parseDraftSubmission, type WixRichContent } from '../../../lib/server/blog-content';
+import { articleDocumentToPlainText, articleDocumentToRichContent, ArticleDocumentError, parseArticleDocument } from '../../../lib/article-document';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
+import { parseResearchCitationSources, ResearchSourceError } from '../../../lib/server/research-sources';
+
+function imageMimeTypeFromName(name: string): string | null {
+  const extension = name.split('.').pop()?.toLowerCase();
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  if (extension === 'gif') return 'image/gif';
+  return null;
+}
+
+async function verifyArticleMediaOwnership(
+  articleDocument: ReturnType<typeof parseArticleDocument> | null,
+): Promise<void> {
+  if (!articleDocument) return;
+  const images = articleDocument.blocks.filter((block) => block.type === 'image');
+  const uniqueImages = [...new Map(images.map((block) => [block.media.id, block] as const)).values()];
+  const getFileDescriptor = auth.elevate(files.getFileDescriptor);
+
+  await Promise.all(uniqueImages.map(async (block) => {
+    if (block.type !== 'image') return;
+    let response: unknown;
+    try {
+      response = await getFileDescriptor(block.media.id);
+    } catch {
+      throw new ArticleDocumentError('An article image could not be verified in this Wix site. Remove it and upload it again.');
+    }
+    const root = response && typeof response === 'object' && 'file' in response
+      ? (response as { file?: unknown }).file
+      : response;
+    if (!root || typeof root !== 'object') {
+      throw new ArticleDocumentError('Wix Media Manager returned an invalid image record.');
+    }
+    const descriptor = root as Record<string, unknown>;
+    const displayName = typeof descriptor.displayName === 'string' ? descriptor.displayName : '';
+    const expectedPrefix = 'blog-editor-' + block.media.uploadToken + '-';
+    const uploadedName = displayName.startsWith(expectedPrefix)
+      ? displayName.slice(expectedPrefix.length)
+      : '';
+    const uploadedMimeType = imageMimeTypeFromName(uploadedName);
+    const id = typeof descriptor._id === 'string'
+      ? descriptor._id
+      : typeof descriptor.id === 'string'
+        ? descriptor.id
+        : '';
+    const url = typeof descriptor.url === 'string' ? descriptor.url : '';
+    if (
+      !displayName.startsWith(expectedPrefix) ||
+      uploadedMimeType !== block.media.mimeType ||
+      id !== block.media.id ||
+      descriptor.mediaType !== 'IMAGE' ||
+      descriptor.operationStatus !== 'READY' ||
+      descriptor.state !== 'OK' ||
+      descriptor.private !== false ||
+      url !== block.media.url
+    ) {
+      throw new ArticleDocumentError("An article image is not a ready, public upload from this Wix site's editorial workspace. Remove it and upload it again.");
+    }
+  }));
+}
 
 async function verifyWixBlogInstalled(): Promise<void> {
   let appInstance;
@@ -35,16 +97,7 @@ async function verifyWixBlogInstalled(): Promise<void> {
     );
   }
 
-  console.info(
-    '[blog-install-check] App Instance:',
-    appInstance,
-  );
-
   const installedApps = appInstance.site?.installedWixApps;
-  console.info(
-    '[blog-install-check] installedWixApps:',
-    installedApps,
-  );
   if (!Array.isArray(installedApps)) {
     throw new ApiError(
       503,
@@ -67,7 +120,7 @@ export const POST: APIRoute = async ({ request }) => {
     let body: unknown;
     try {
       const text = await request.text();
-      if (text.length > 48_000) {
+      if (text.length > 500_000) {
         return jsonResponse({ error: 'The article is too large for a Wix Blog draft.' }, 413);
       }
       body = JSON.parse(text) as unknown;
@@ -76,8 +129,23 @@ export const POST: APIRoute = async ({ request }) => {
     }
 
     const submission = parseDraftSubmission(body);
-    const richContent = bodyToRichContent(submission.body);
+    const input = body as Record<string, unknown>;
+    if (typeof input.generatedByMemberId !== 'string' || input.generatedByMemberId !== member.memberId) {
+      throw new ApiError(
+        403,
+        'Only the Wix member who generated this article can save it as a draft. Sign in with the original account and generate the article again if needed.',
+      );
+    }
+    const citationSources = parseResearchCitationSources(input.researchSources);
+    const articleDocument = input.articleDocument === undefined ? null : parseArticleDocument(input.articleDocument);
+    if (articleDocument && articleDocumentToPlainText(articleDocument).trim() !== submission.body) {
+      throw new InputValidationError('The submitted article text does not match its structured editor document. Refresh the editor and try again.');
+    }
+    const richContent: WixRichContent = articleDocument
+      ? articleDocumentToRichContent(articleDocument, citationSources) as unknown as WixRichContent
+      : bodyToRichContent(submission.body, citationSources);
 
+    await verifyArticleMediaOwnership(articleDocument);
     await verifyWixBlogInstalled();
 
     const result = await runDraftSubmission(
@@ -93,6 +161,9 @@ export const POST: APIRoute = async ({ request }) => {
               title: submission.title,
               memberId: member.memberId,
               excerpt: submission.metaDescription,
+              ...(submission.seoSlug ? { seoSlug: submission.seoSlug } : {}),
+              featured: submission.featured,
+              hashtags: submission.hashtags,
               richContent,
               seoData: {
                 settings: {
@@ -169,6 +240,12 @@ export const POST: APIRoute = async ({ request }) => {
 
     return jsonResponse({ draft: result });
   } catch (error) {
+    if (error instanceof ResearchSourceError) {
+      return jsonResponse({ error: error.message }, error.status);
+    }
+    if (error instanceof ArticleDocumentError) {
+      return jsonResponse({ error: error.message }, 400);
+    }
     if (error instanceof InputValidationError) {
       return jsonResponse({ error: error.message }, 400);
     }
