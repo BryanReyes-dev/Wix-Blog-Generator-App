@@ -7,7 +7,7 @@ import {
   SOFT_BUTTON_CLASS,
   TEXTAREA_CLASS,
 } from "../lib/styles";
-import type { MediaReference, ResearchLink } from "../types";
+import type { MediaReference, ResearchLink, ResearchLinkCheck } from "../types";
 import FormField from "./FormField";
 import MediaReferenceCard from "./MediaReferenceCard";
 import ResearchLinkCard from "./ResearchLinkCard";
@@ -25,6 +25,7 @@ type Props = {
   keywords: string;
   onKeywordsChange: (value: string) => void;
   researchLinks: ResearchLink[];
+  researchLinkResults: ResearchLinkCheck[];
   onResearchLinkChange: (id: string, field: "url" | "notes", value: string) => void;
   onAddResearchLink: () => void;
   onRemoveResearchLink: (id: string) => void;
@@ -49,6 +50,7 @@ export default function ArticleBriefForm({
   keywords,
   onKeywordsChange,
   researchLinks,
+  researchLinkResults,
   onResearchLinkChange,
   onAddResearchLink,
   onRemoveResearchLink,
@@ -175,6 +177,7 @@ export default function ArticleBriefForm({
                   key={link.id}
                   link={link}
                   index={index}
+                  check={researchLinkResults.find((result) => result.id === link.id && result.url === link.url.trim())}
                   onChange={onResearchLinkChange}
                   onRemove={onRemoveResearchLink}
                 />
