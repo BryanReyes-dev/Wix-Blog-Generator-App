@@ -1,61 +1,121 @@
+
+/* Container used by the real Wix custom element and the isolated dev preview. */
+.widgetContainer {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  container-type: inline-size;
+  container-name: blog-workflow;
+}
+
+/* Main workflow surface */
+
 .root {
   box-sizing: border-box;
   display: grid;
-  width: 100%;
-  max-width: 1000px;
-  min-height: 100%;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
-  margin: 0 auto;
-  padding: 24px;
-  border: 1px solid #d9dfe9;
-  border-radius: 16px;
+
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  margin: 0;
+  padding: clamp(12px, 3cqi, 48px);
+  gap: clamp(16px, 2.2cqi, 32px);
+
   background: #f8fafc;
   color: #172033;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+.root > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Header */
+
 .workflowTopBar {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
+  min-width: 0;
+}
+
+.workflowTopBar > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workflowTopBar > button {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: clamp(22px, 2.2cqi, 34px);
   line-height: 1.2;
+  text-wrap: balance;
 }
 
 .workflowIntro {
-  max-width: 760px;
+  max-width: 72ch;
   margin: 8px 0 0;
   color: #5c6472;
-  font-size: 14px;
+  font-size: clamp(14px, 1.15cqi, 16px);
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
+/* Forms */
+
 .workflowForm {
+  box-sizing: border-box;
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(14px, 1.6cqi, 22px);
+
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: clamp(16px, 2cqi, 32px);
+
   border: 1px solid #e1e6ef;
   border-radius: 12px;
   background: #ffffff;
 }
 
+.workflowForm > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .workflowInput,
 .workflowTextarea {
   box-sizing: border-box;
+  display: block;
+
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+
   border: 1px solid #cdd4df;
   border-radius: 8px;
   padding: 11px 12px;
+
   background: #ffffff;
   color: #172033;
   font: inherit;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .workflowInput:focus,
@@ -70,25 +130,45 @@
   line-height: 1.55;
 }
 
+/* Article review */
+
 .reviewSection {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 1.8cqi, 24px);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.reviewSection > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .workflowSectionTitle {
   margin: 0;
   color: #172033;
-  font-size: 19px;
+  font-size: clamp(19px, 1.6cqi, 26px);
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
 .metadataCard {
-  padding: 16px 20px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  padding: clamp(14px, 1.6cqi, 24px);
+
   border: 1px solid #e1e6ef;
   border-radius: 12px;
+
   background: #ffffff;
   color: #30394a;
   font-size: 13px;
   line-height: 1.55;
+
+  overflow-wrap: anywhere;
 }
 
 .metadataCard p {
@@ -99,20 +179,608 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+
   margin: 10px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .keywordList li {
+  max-width: 100%;
   border-radius: 999px;
   padding: 5px 10px;
   background: #edf3ff;
   color: #284e89;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 620px) {
-  .root { padding: 18px; }
-  .workflowTopBar { flex-direction: column; }
-  .workflowForm { padding: 16px; }
+/* DESKTOP LAYOUT: 1024px and above */
+
+@container blog-workflow (min-width: 1024px) {
+  .root {
+    padding: clamp(32px, 3cqi, 56px);
+    gap: 28px;
+  }
+
+  .workflowTopBar {
+    flex-direction: row;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .workflowTopBar > button {
+    width: fit-content;
+  }
+
+  .workflowForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+    padding: clamp(24px, 2.2cqi, 32px);
+  }
+
+  /* Keep long-form fields and primary actions on their own row. */
+  .workflowForm > div:has(.workflowTextarea),
+  .workflowForm > div:nth-last-child(2),
+  .workflowForm > button {
+    grid-column: 1 / -1;
+  }
+
+  .workflowForm > button {
+    width: fit-content;
+  }
+
+  .reviewSection {
+    gap: 20px;
+  }
+
+  .metadataCard {
+    padding: clamp(20px, 1.8cqi, 24px);
+  }
+}
+
+/* LARGE DESKTOP: 1440px and above */
+
+@container blog-workflow (min-width: 1440px) {
+  .root {
+    padding: 48px clamp(48px, 4.4cqi, 72px);
+    gap: 32px;
+  }
+
+  .workflowTopBar {
+    gap: 40px;
+  }
+
+  .workflowForm {
+    padding: 32px;
+    gap: 24px;
+  }
+
+  .reviewSection {
+    gap: 24px;
+  }
+
+  .metadataCard {
+    padding: 24px;
+  }
+}
+
+/* Research, media references, and workflow guidance */
+.briefWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 2cqi, 24px);
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fullWidthGroup {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sectionHeadingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sectionHint {
+  display: block;
+  max-width: 75ch;
+  margin: 6px 0 0;
+  color: #687386;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.secondaryAction,
+.removeAction {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border: 1px solid #cdd4df;
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #f8fafc;
+  color: #23324a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondaryAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.removeAction {
+  color: #8b3030;
+  background: #fff;
+}
+
+.emptyState {
+  margin: 0;
+  border: 1px dashed #cdd4df;
+  border-radius: 10px;
+  padding: 13px;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.researchList,
+.mediaList {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.researchCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f8fafc;
+}
+
+.researchFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.mediaCard {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 10px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.mediaThumbnail {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border: 1px solid #e1e6ef;
+  border-radius: 8px;
+  background: #fff;
+  object-fit: cover;
+}
+
+.mediaDetails {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mediaName {
+  min-width: 0;
+  color: #263248;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mediaCard > .removeAction {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.workflowTips {
+  min-width: 0;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  padding: clamp(16px, 2cqi, 22px);
+  background: #fff;
+  color: #30394a;
+}
+
+.workflowTips ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: #5c6472;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.editorLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(16px, 2cqi, 24px);
+  min-width: 0;
+}
+
+.previewCard {
+  box-sizing: border-box;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.previewHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e1e6ef;
+  padding: 12px 14px;
+  color: #263248;
+  font-size: 13px;
+}
+
+.previewHeader p {
+  margin: 4px 0 0;
+  color: #687386;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.previewHeader > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #edf3ff;
+  color: #284e89;
+  font-size: 11px;
+}
+
+.previewArticle {
+  min-height: 360px;
+  max-height: 760px;
+  overflow: auto;
+  padding: clamp(16px, 2.2cqi, 28px);
+  color: #344054;
+  overflow-wrap: anywhere;
+}
+
+.previewArticle h2 {
+  margin: 0 0 12px;
+  color: #172033;
+  font-size: clamp(22px, 2cqi, 30px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.previewDescription {
+  margin: 0 0 22px;
+  color: #687386;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.previewBody {
+  min-width: 0;
+  color: #344054;
+  font-size: 14px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.previewHeading {
+  margin: 22px 0 8px;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.previewParagraph {
+  margin: 0 0 14px;
+  white-space: pre-wrap;
+}
+
+.previewList {
+  margin: 0 0 14px;
+  padding-left: 22px;
+}
+
+.citationLink,
+.sourceList a {
+  color: #2368d1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.sourceIntro {
+  margin: 6px 0 0;
+  color: #687386;
+  font-size: 12px;
+}
+
+.sourceList {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.sourceList li {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sourceList span {
+  display: block;
+  margin-top: 3px;
+  color: #687386;
+  font-size: 11px;
+}
+
+.sourceList p {
+  margin: 5px 0 0;
+  color: #5c6472;
+  font-size: 12px;
+}
+
+@container blog-workflow (min-width: 640px) {
+  .researchFields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mediaCard {
+    grid-template-columns: 82px minmax(0, 1fr) auto;
+  }
+
+  .mediaThumbnail {
+    width: 82px;
+    height: 82px;
+  }
+
+  .mediaCard > .removeAction {
+    grid-column: auto;
+  }
+}
+
+@container blog-workflow (min-width: 1024px) {
+  .briefWorkspace {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .workflowTips {
+    position: sticky;
+    top: 16px;
+  }
+
+  .editorLayout {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    align-items: start;
+    gap: 22px;
+  }
+
+  .previewCard {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+@container blog-workflow (min-width: 1440px) {
+  .briefWorkspace {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  }
+
+  .editorLayout {
+    gap: 28px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  }
+
+  .researchCard,
+  .mediaCard {
+    padding: 14px;
+  }
+
+  .workflowTips {
+    padding: 24px;
+  }
+}
+
+
+/* Editorial review: original magazine-style styling inspired by the
+   MIT-licensed Revista React/Gatsby publication layout. */
+.editorialMasthead{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px;border-bottom:1px solid #d8d0c3;padding:0 0 18px}
+.editorialKicker{display:block;margin:0 0 8px;color:#8a6e4b;font-size:10px;font-weight:800;letter-spacing:.16em;line-height:1.4}
+.editorialKicker span{color:#b7a58e}
+.editorialStatus,.editorialMediaCount{border:1px solid #d9cfbf;border-radius:999px;padding:7px 11px;color:#6c5b46;background:#f5f0e7;font-size:10px;font-weight:800;letter-spacing:.12em}
+.editorialForm{box-sizing:border-box;display:grid;gap:20px;min-width:0;border:1px solid #e3ddd2;border-radius:4px;padding:clamp(16px,2.3cqi,30px);background:#fffefa;box-shadow:0 14px 38px rgb(60 45 28 / 5%)}
+.editorialFormMasthead,.editorialPreviewToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e5ded2;padding:0 0 12px;color:#8b806f;font-size:9px;font-weight:800;letter-spacing:.14em}
+.editorialHeadlineInput{box-sizing:border-box;width:100%;min-width:0;border:0;border-bottom:1px solid #d8d0c3;border-radius:0;padding:6px 0 12px;background:transparent;color:#28251f;font-family:Georgia,"Times New Roman",serif;font-size:clamp(24px,2.2cqi,34px);font-weight:700;line-height:1.18}
+.editorialHeadlineInput:focus{border-color:#9b6d3f;outline:0}
+.editorialBodyInput{box-sizing:border-box;width:100%;min-width:0;border:1px solid #e0d9ce;border-radius:3px;padding:14px;background:#fff;color:#403a32;font:14px/1.8 Georgia,"Times New Roman",serif;resize:vertical}
+.editorialBodyInput:focus{border-color:#9b6d3f;outline:3px solid rgb(155 109 63 / 12%)}
+.mediaPlacementPanel{display:grid;gap:14px;border-top:1px solid #e5ded2;padding-top:18px}
+.mediaPlacementHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.mediaPlacementHeader h4,.editorialSources h4,.editorialMetadata h4{margin:0;color:#28251f;font:700 21px/1.2 Georgia,"Times New Roman",serif}
+.mediaPlacementHeader p{max-width:55ch;margin:6px 0 0;color:#797164;font-size:12px;line-height:1.6}
+.mediaPlacementList{display:grid;gap:10px}
+.mediaPlacementCard{display:grid;gap:10px;min-width:0;border:1px solid #e7e0d6;border-radius:3px;padding:12px;background:#fdfbf7}
+.mediaPlacementCardHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.mediaPlacementCardHeader>div:first-child{display:grid;gap:4px;min-width:0}
+.mediaPlacementCardHeader strong{color:#39332b;font-size:12px;overflow-wrap:anywhere}
+.mediaPlacementCardHeader span{color:#8a7d6a;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+.mediaOrderControls{display:flex;gap:5px}
+.editorialIconButton{width:28px;height:28px;border:1px solid #ddd3c4;border-radius:3px;background:#fffefa;color:#62513b;cursor:pointer}
+.editorialIconButton:disabled{opacity:.35;cursor:not-allowed}
+.editorialControlLabel{display:grid;gap:5px;color:#847764;font-size:9px;font-weight:800;letter-spacing:.12em}
+.editorialControlLabel input,.editorialControlLabel select{box-sizing:border-box;width:100%;min-width:0;min-height:36px;border:1px solid #ddd5c8;border-radius:3px;padding:7px 9px;background:#fff;color:#3a342c;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;letter-spacing:normal}
+.editorialControlLabel input:focus,.editorialControlLabel select:focus{border-color:#9b6d3f;outline:2px solid rgb(155 109 63 / 12%)}
+.editorialSaveRow{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #e5ded2;padding-top:16px}
+.editorialSaveRow p{max-width:36ch;margin:0;color:#807566;font-size:11px;line-height:1.5}
+.editorialPreviewColumn{display:grid;gap:14px;min-width:0}
+.editorialPreviewToolbar{border:1px solid #e1d9cc;border-radius:3px;padding:10px 12px;background:#f4efe6}
+.editorialPreviewToolbar>div{display:flex;align-items:center;gap:7px}
+.editorialLiveDot{width:6px;height:6px;border-radius:50%;background:#63866a;box-shadow:0 0 0 3px rgb(99 134 106 / 12%)}
+.editorialPublication{min-width:0;border:1px solid #e1d9cc;background:#fffefa;box-shadow:0 14px 38px rgb(60 45 28 / 6%);color:#342e27;overflow:hidden}
+.editorialPublicationHeader{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:17px 18px 13px;color:#2e2923;font:800 10px/1.3 ui-sans-serif,system-ui,sans-serif;letter-spacing:.13em}
+.editorialPublicationHeader>span:last-child{color:#8b7a62;font-size:8px}
+.editorialPublicationHeader i{padding:0 4px;color:#b28b5b;font-style:normal}
+.editorialPublicationRule{height:3px;margin:0 18px;background:#342e27;box-shadow:0 2px #d7cbbb}
+.editorialArticleEyebrow{display:flex;align-items:center;gap:9px;margin:26px 22px 12px;color:#93744d;font-size:8px;font-weight:800;letter-spacing:.15em}
+.editorialArticleEyebrow span+span{border-left:1px solid #d9cdbb;padding-left:9px;color:#a69a88}
+.editorialPreviewTitle{margin:0 22px 13px;color:#29251f;font:700 clamp(30px,3.1cqi,46px)/1.03 Georgia,"Times New Roman",serif;letter-spacing:-.045em;overflow-wrap:anywhere}
+.editorialDeck{margin:0 22px 18px;color:#786d5f;font:15px/1.55 Georgia,"Times New Roman",serif}
+.editorialByline{display:flex;align-items:center;gap:9px;margin:0 22px 20px;border-top:1px solid #e7dfd2;border-bottom:1px solid #e7dfd2;padding:10px 0}
+.editorialAvatar{display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#e9e0d3;color:#6d573a;font:700 9px/1 ui-sans-serif,system-ui,sans-serif}
+.editorialByline>span:nth-child(2){display:grid;gap:2px}
+.editorialByline strong{color:#494136;font-size:10px}
+.editorialByline small{color:#948675;font-size:9px}
+.editorialReadTime{margin-left:auto;color:#9a8b78;font-size:8px;font-weight:800;letter-spacing:.12em}
+.editorialHeroPlaceholder{display:grid;min-height:190px;margin:0 22px;place-items:center;overflow:hidden;background:#e8dfd2}
+.editorialHeroPlaceholder img{display:block;width:100%;max-height:340px;object-fit:cover}
+.editorialHeroPlaceholder>div{display:grid;gap:9px;padding:32px 20px;text-align:center}
+.editorialHeroPlaceholder>div span{color:#927b5b;font-size:9px;font-weight:800;letter-spacing:.2em}
+.editorialHeroPlaceholder>div strong{max-width:16ch;color:#4a4033;font:700 27px/1.05 Georgia,"Times New Roman",serif}
+.editorialHeroCaption{margin:7px 22px 24px;color:#968977;font-size:9px;font-style:italic}
+.editorialArticleBody{max-width:68ch;margin:0 auto;padding:0 22px 25px;color:#484137;font:14px/1.83 Georgia,"Times New Roman",serif;overflow-wrap:anywhere}
+.editorialPreviewHeading{margin:28px 0 10px;color:#302a23;font:700 23px/1.12 Georgia,"Times New Roman",serif;letter-spacing:-.025em}
+.editorialPreviewParagraph{margin:0 0 17px;white-space:pre-wrap}
+.editorialMediaFigure{margin:22px 0 25px}
+.editorialMediaFigure img,.editorialMediaFigure video{display:block;width:100%;max-height:440px;border-radius:2px;background:#ede7dd;object-fit:contain}
+.editorialMediaFigure audio{display:block;width:100%}
+.editorialMediaCaption{margin-top:7px;color:#8e816e;font:italic 10px/1.5 Georgia,"Times New Roman",serif}
+.editorialDownload{display:flex;align-items:center;gap:12px;border:1px solid #ded4c5;padding:14px;color:#4c4030;background:#f7f2e9;text-decoration:none}
+.editorialDownload>span:first-child{display:grid;width:32px;height:32px;place-items:center;border:1px solid #d5c5af;border-radius:50%;font-size:16px}
+.editorialDownload>span:last-child{display:grid;gap:4px;min-width:0}
+.editorialDownload strong{font-size:11px;overflow-wrap:anywhere}
+.editorialDownload small{color:#8a7b66;font-size:9px}
+.editorialPublicationFooter{display:flex;justify-content:space-between;gap:10px;border-top:3px double #d9cfbf;padding:12px 18px;color:#988a77;font-size:8px;font-weight:800;letter-spacing:.13em}
+.editorialSources,.editorialMetadata{border:1px solid #e1d9cc;padding:17px;background:#fffefa}
+.editorialSources h4,.editorialMetadata h4{margin-bottom:12px}
+.editorialSources ol{display:grid;gap:11px;margin:0;padding-left:17px}
+.editorialSources li{min-width:0}
+.editorialSources a{color:#725b3d;font:13px/1.4 Georgia,"Times New Roman",serif;overflow-wrap:anywhere}
+.editorialSources li span{display:block;margin-top:3px;color:#988a78;font-size:9px}
+.editorialMetadata p{margin:0 0 12px;color:#776c5d;font:12px/1.6 Georgia,"Times New Roman",serif}
+.editorialMetadata>div{display:flex;flex-wrap:wrap;gap:6px}
+.editorialMetadata>div span{border:1px solid #e4dacc;border-radius:999px;padding:5px 8px;color:#806a4d;font-size:9px}
+
+@container blog-workflow (min-width:640px){
+  .mediaPlacementCard{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .mediaPlacementCardHeader{grid-column:1/-1}
+  .editorialPreviewTitle{font-size:clamp(34px,3.2cqi,48px)}
+}
+@container blog-workflow (min-width:1024px){
+  .editorialPreviewColumn{position:sticky;top:16px}
+  .editorialPublicationHeader{padding-left:22px;padding-right:22px}
+  .editorialArticleEyebrow,.editorialHeroCaption{margin-left:26px;margin-right:26px}
+  .editorialPreviewTitle,.editorialDeck,.editorialByline{margin-left:26px;margin-right:26px}
+  .editorialHeroPlaceholder{margin-left:26px;margin-right:26px}
+  .editorialArticleBody{padding-left:26px;padding-right:26px}
+}
+
+
+/* Reusable article design presets and responsive, non-single-column media compositions. */
+.editorialMediaWide{}
+.articleDesignFields{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.articleAccentInput{box-sizing:border-box;width:100%;min-height:42px;padding:4px;border:1px solid #d8d0c3;border-radius:4px;background:#fffefa;cursor:pointer}
+.articleDesignControls{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin:0 0 12px;padding:12px;border:1px solid #e5ded2;background:#fffefa}
+.articleDesignControls label{display:grid;gap:5px;color:#7a7062;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.articleDesignControls select{box-sizing:border-box;width:100%;min-height:36px;border:1px solid #ded6ca;border-radius:3px;padding:6px 8px;background:#fff;color:#37332d;font:inherit;letter-spacing:normal;text-transform:none}
+.editorialPublication{--article-accent:#8a6e4b}
+.editorialPublication[data-template="minimal"]{background:#fff;border-color:#dce1e8;color:#303b4b;font-family:Arial,Helvetica,sans-serif}
+.editorialPublication[data-template="minimal"] .editorialPreviewTitle,.editorialPublication[data-template="minimal"] .editorialPreviewHeading{font-family:Arial,Helvetica,sans-serif;letter-spacing:-.035em}
+.editorialPublication[data-template="visual"]{background:#fffdfb;border-color:#e6c9bf}
+.editorialPublication[data-template="visual"] .editorialPreviewTitle{font-family:Georgia,"Times New Roman",serif;font-size:clamp(32px,4cqi,52px);line-height:1.02}
+.editorialPublication .editorialArticleEyebrow,.editorialPublication .editorialPublicationHeader,.editorialPublication .editorialPublicationFooter{border-color:color-mix(in srgb,var(--article-accent) 28%,transparent)}
+.editorialPublication .editorialArticleEyebrow span:first-child,.editorialPublication .editorialKicker{color:var(--article-accent)}
+.editorialMediaFigure{box-sizing:border-box;display:grid;min-width:0;gap:8px;margin:22px 0}
+.editorialMediaVisual{display:block;width:100%;max-width:100%;max-height:620px;border-radius:3px;object-fit:cover}
+.editorialMediaAside{min-width:0}
+.editorialMediaLayoutText{margin:0 0 7px;color:#393b3e;font:600 15px/1.55 Georgia,"Times New Roman",serif}
+.editorialMediaCaption{margin:0;color:#81796d;font-size:11px;line-height:1.5}
+.editorialMediaGallery{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:24px 0}
+.editorialMediaGalleryItem{align-content:start;min-width:0;margin:0}
+.editorialMediaGalleryItem .editorialMediaVisual{aspect-ratio:4/3;max-height:none}
+.editorialMediaSplitLeft,.editorialMediaSplitRight{grid-template-columns:minmax(0,1fr);align-items:center;gap:12px;padding:12px;border:1px solid #e7e0d6;background:#fdfbf7}
+.editorialMediaSplitLeft .editorialMediaVisual,.editorialMediaSplitRight .editorialMediaVisual{aspect-ratio:4/3;max-height:340px}
+.editorialMediaSplitLeft .editorialMediaAside,.editorialMediaSplitRight .editorialMediaAside{padding:4px}
+.editorialPublication[data-density="visual-rich"] .editorialMediaFigure{margin-block:30px}
+.editorialPublication[data-density="visual-rich"] .editorialMediaGallery{gap:7px}
+.editorialPublication[data-density="quiet"] .editorialMediaFigure{margin-block:15px}
+.editorialPublication[data-density="quiet"] .editorialMediaSplitLeft,.editorialPublication[data-density="quiet"] .editorialMediaSplitRight{border-color:transparent;background:transparent}
+@container blog-workflow (min-width:640px){
+  .articleDesignFields,.articleDesignControls{grid-template-columns:repeat(3,minmax(0,1fr));align-items:end}
+}
+@container blog-workflow (min-width:820px){
+  .editorialMediaSplitLeft,.editorialMediaSplitRight{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:18px;padding:16px}
+  .editorialMediaSplitRight .editorialMediaVisual{order:2}
+  .editorialMediaSplitRight .editorialMediaAside{order:1}
+}
+@container blog-workflow (min-width:1080px){
+  .editorialMediaGallery{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .editorialMediaSplitLeft,.editorialMediaSplitRight{gap:22px;padding:20px}
+}
+
+
+/* Reusable article section patterns. Kept inside the publication preview's CSS Module. */
+.sectionPatternPanel{display:grid;gap:13px;border-top:1px solid #e5ded2;padding-top:18px}
+.sectionPatternList{display:grid;gap:9px}
+.sectionPatternRow{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0;border:1px solid #e7e0d6;border-radius:3px;padding:10px 12px;background:#fffefa}
+.sectionPatternRow span{color:#51483b;font:600 13px/1.4 Georgia,"Times New Roman",serif;overflow-wrap:anywhere}
+.sectionPatternRow select{box-sizing:border-box;width:100%;min-height:36px;border:1px solid #ded6ca;border-radius:3px;padding:6px 8px;background:#fff;color:#37332d;font-family:inherit;font-size:12px;line-height:1.4}
+.editorialSectionCallout{margin:16px 0;padding:14px 16px;border-inline-start:4px solid var(--article-accent);background:color-mix(in srgb,var(--article-accent) 8%,#fff);color:#51483b}
+.editorialSectionCallout .editorialPreviewParagraph{margin:0 0 10px}
+.editorialSectionCallout .editorialPreviewParagraph:last-child{margin-bottom:0}
+.editorialStep{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:start;gap:11px;margin:13px 0;padding:13px;border:1px solid color-mix(in srgb,var(--article-accent) 24%,#e7e0d6);background:color-mix(in srgb,var(--article-accent) 5%,#fff)}
+.editorialStep>span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--article-accent);color:#fff;font:700 10px/1 Arial,Helvetica,sans-serif}
+.editorialStep .editorialPreviewParagraph{margin:2px 0 0}
+@container blog-workflow (min-width:640px){
+  .sectionPatternRow{grid-template-columns:minmax(0,1fr) minmax(190px,.62fr);align-items:center}
+  .sectionPatternRow select{max-width:280px;justify-self:end}
+  .editorialSectionCallout{padding:18px 22px}
+}
+@container blog-workflow (min-width:820px){
+  .editorialStep{grid-template-columns:42px minmax(0,1fr);gap:15px;padding:16px 18px}
+  .editorialStep>span{width:36px;height:36px;font-size:11px}
 }

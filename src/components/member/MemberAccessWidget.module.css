@@ -1,14 +1,54 @@
+/* Make the Wix custom element the responsive sizing context for its UI. */
+:global(member-login-test) {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  container-type: inline-size;
+  container-name: blog-workflow;
+}
+
 .root {
   box-sizing: border-box;
   display: flex;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 100%;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: clamp(12px, 2.5cqi, 40px);
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (max-width: 620px) {
-  .root { padding: 16px; }
+.root > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep authentication and status states comfortable at each widget width. */
+
+@container blog-workflow (max-width: 639px) {
+  .root {
+    padding: 12px;
+  }
+}
+
+@container blog-workflow (min-width: 640px) {
+  .root {
+    padding: 20px;
+  }
+}
+
+@container blog-workflow (min-width: 1024px) {
+  .root {
+    padding: 28px;
+  }
+}
+
+@container blog-workflow (min-width: 1440px) {
+  .root {
+    padding: 40px;
+  }
 }

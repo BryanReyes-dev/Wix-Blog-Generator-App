@@ -1,67 +1,112 @@
 # Wix Blog Generator
 
-This Wix CLI/Astro app gives approved site members a basic workflow for generating, reviewing, editing, and explicitly saving unpublished Wix Blog drafts. Wix site-member authentication is reused. The server checks each member's approval before generation or draft creation, validates generated article data, and checks Wix Blog installation before saving a draft.
+A Wix CLI and Astro app that helps approved site members research, generate, edit, preview, and save **unpublished Wix Blog drafts**. The site experience uses React and TypeScript; Wix provides member authentication, AI access, Media Manager storage, and Blog draft persistence.
+
+## What the app does
+
+1. A site member signs in through Wix.
+2. The app checks the member's signed Wix identity and looks up their approval in the app-owned `WorkflowAccess` collection.
+3. An approved member submits a topic, audience, tone, instructions, optional SEO keywords, research links, and original media.
+4. The server retrieves the supplied research pages and asks Wix AI to generate a structured article.
+5. Original files are uploaded in their original format to Wix Media Manager. Image and video preview frames can be prepared separately for AI visual context.
+6. The member edits the article and reviews source citations, media placements, layout, and SEO metadata.
+7. When the member chooses **Create unpublished draft**, the server validates the submission and creates a Wix Blog draft with `publish: false`.
+
+Generation alone does not create a Wix Blog item. The app does not publish or schedule posts automatically.
 
 ## Source structure
 
-- `src/components/` contains the React UI, organized by purpose (`blog`, `dashboard`, `member`, and shared `ui`).
-- `src/extensions/` contains Wix extension builder definitions, the site-widget custom-element adapter, and the Wix data-collection schema.
-- `src/lib/hooks/` contains descriptive React hooks for client-side Wix member access and blog-workflow state/API interactions.
-- `src/lib/server/` contains server-only Wix integration, authorization, AI generation, and draft-submission logic.
-- `src/lib/blog-content.ts` contains reusable blog types, validation, and content conversion shared by the browser workflow and server routes.
-- `src/pages/` keeps Astro file-based routing and the HTTP API endpoints.
+- `src/components/` contains shared React UI, organized by purpose (`blog`, `dashboard`, `member`, `dev`, and shared `ui`).
+- `src/extensions/` contains Wix extension registrations, site-widget code, dashboard code, and the app-owned data-collection schema.
+- `src/lib/client/` contains the shared authenticated app-API client.
+- `src/lib/hooks/` contains React hooks for member access and workflow state.
+- `src/lib/server/` contains server-only Wix integration, authorization, AI generation, research, and draft-submission logic.
+- `src/pages/api/` contains the app's HTTP API endpoints.
+- `src/pages/dev/` contains development-only UI preview routes.
 
-React components are kept out of Wix registration files. The site widget's custom-element adapter mounts the shared React UI, while the dashboard page uses the same component-first source organization. CSS Modules live beside the components they style.
+## Authentication and API requests
 
-## Basic member workflow
+Site widgets and dashboard extensions call this app's own HTTP endpoints through the shared `apiFetch()` helper in `src/lib/client/api.ts`. It uses Wix's `httpClient.fetchWithAuth()` and derives the app backend origin from the module URL.
 
-1. A member signs in through Wix at `/admin`.
-2. The protected `/admin/workflow` page checks the signed-in member and their approval through a server endpoint.
-3. The member submits a topic, audience, tone, instructions, and optional SEO keywords.
-4. The server calls the Wix AI SDK, then validates the returned article on the server.
-5. The member reviews and edits the title and article body.
-6. Only after the member selects **Create unpublished draft** does the server check Wix Blog and create a draft with `publish: false`.
+**Production does not use a per-customer-site CORS allowlist.** The app's endpoints are part of the Wix-hosted app backend, and frontend extensions call them using Wix's authenticated-request pattern. Installing the app on another customer site does not require adding that site's domain to CORS configuration.
 
-Generation alone never creates a Wix Blog item. There is no publish or scheduling endpoint. The draft submission guard reduces duplicate attempts but does not guarantee exactly-once delivery across server restarts or uncertain network failures.
+Local development is different: the widget runs inside a Wix-hosted development-site preview, while `wix dev` serves the app and API from `localhost:4321`. The browser therefore treats the request as cross-origin. The `vite.server.cors` rule in `astro.config.mjs` is a **local development-server setting only**; it permits HTTPS Wix development-preview hostnames ending in `.wixdev-sites.org`. It is not included as a production CORS policy. Do not add individual customer domains or production site domains to this rule.
 
-## Wix AI and packages
+Keep the Wix authenticated request pattern and enforce access on the server:
 
-Generation uses the Wix AI SDK rather than a direct OpenAI API key. Wix handles AI provider authentication and billing for Wix apps. The AI APIs are currently documented as **Developer Preview**, so their behavior and SDK contracts may change.
+- Validate the active Wix token.
+- Require a site-member identity for member workflows.
+- Check the caller's approval before generation, media operations, or draft creation.
+- Require the appropriate privileged Wix user identity for dashboard administration.
+- Never trust a member ID supplied by the browser.
 
-Required packages are included in `package.json`:
+Each Wix site installation has its own app data and approval records. Installing the app on another site does not require a new CORS entry, but the new site must be provisioned with the app-owned collection and its own approval records.
 
-- `@wix/ai` — Wix-managed AI provider.
-- `ai` (version 6.0.26 or later) — Vercel AI SDK methods used by Wix AI.
-- `zod` (version 4.1.8 or later) — included as recommended by Wix's SDK setup instructions.
+## Local UI previews
 
-No `OPENAI_API_KEY` is required. Optional server-side variable `WIX_AI_MODEL` defaults to `gpt-5-mini`; use a model ID supported by Wix AI. Wix's documentation notes that AI model calls consume AI credits and that usage for a Wix app is billed to the Wix users who install the app. Verify the actual wallet and billing behavior on the development site before inviting contributors; a credit-balance display alone does not prove which wallet a generation request consumes.
+Run `npm run dev`, then open `/dev` on the local development app:
 
-For Wix CLI projects, use `wix env set` to configure server variables and `wix env pull` to make them available in local development. Never put secrets in public/client variables. This integration does not require a separate OpenAI API key.
+- `/dev/member-access` — mock sign-in, approved workflow, permission-denied, and unavailable states.
+- `/dev/blog-workflow` — complete workflow with mock article generation, editing, and mock draft saving.
+- `/dev/blog-brief` — the brief form in isolation.
+- `/dev/article-review` — the article editor and metadata in isolation.
 
-## Wix setup
+The previews use `mode="mock"`. They do not call the live Wix generation or draft APIs and cannot create a real Wix Blog draft. Use the installed development site to validate live Wix authentication, permissions, AI access, media uploads, and Blog draft creation.
 
-Configure the app permission scope **Invoke AI Models** (`SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS`) in Wix Developer Center. Keep the existing permissions required for member approvals, member lookup, Wix Blog draft creation, app-instance inspection, and the existing AI Credits dashboard.
+## Wix AI and environment variables
 
-Also add **Wix Blog** under **App Profile → App Audience → Required Wix products**. The runtime check compares installed Wix apps against Wix Blog app ID `14bcded7-0066-7c35-14d7-466cb3f09103`; the Developer Center dependency helps prevent installation on sites without Blog, while the runtime check remains the final gate.
+Generation uses Wix's managed `@wix/ai` provider rather than a direct OpenAI API key. The optional server-side variable `WIX_AI_MODEL` selects the model and defaults to `gpt-5-mini` when unset. Use a model ID currently supported by Wix AI.
 
-Approval records are in the app-owned `WorkflowAccess` collection. The API routes must continue to require an active Wix member identity and an approved member before generation or draft creation. Do not trust client-supplied member IDs.
+The `.env.example` file documents this optional setting. Configure the shared Wix project variable with the Wix CLI, then pull it for local development:
 
-## Install and validate
+```bash
+npx wix env set --key WIX_AI_MODEL --value gpt-5-mini
+npx wix env pull
+```
 
-After pulling the branch, install dependencies and refresh the npm lockfile:
+Do not commit `.env.local`, access tokens, or other secrets.
 
-```sh
-npm install
+## Wix app setup
+
+Configure and approve the required permissions in Wix Developer Center, including:
+
+- **Invoke AI Models** — `SCOPE.DATA_SCIENCE.INVOKE_AI_MODELS`
+- **Manage Media Manager** — `SCOPE.DC-MEDIA.MANAGE-MEDIAMANAGER`
+- **Read Media Manager** — `SCOPE.DC-MEDIA.READ-MEDIAMANAGER`
+- **Manage Your App** — `SCOPE.DC.MANAGE-YOUR-APP`
+- The member, data-collection, Wix Blog, and AI Credits permissions documented in `agents-files/WIX-PERMISSIONS.md`.
+
+Also add **Wix Blog** under **App Profile → App Audience → Required Wix products**, and install Wix Blog on each site that will use the app. The draft API verifies Blog installation before creating a post.
+
+Approval records live in the private app-owned `WorkflowAccess` collection. Its item permissions must remain `PRIVILEGED`. The collection must be provisioned for each app installation.
+
+## Local development and validation
+
+Use the Node/npm versions declared by the repository toolchain configuration. From the project root:
+
+```bash
+npm ci
+npx wix env pull
+npm run dev
+```
+
+Open the development app's `/dev` route for isolated UI previews. To validate the application:
+
+```bash
 npm run typecheck
 npm test
 npm run build
 ```
 
-Then run the app on the Wix development site. Test generation as an approved site member, verify that an unapproved member is rejected, review/edit a generated article, and confirm the final action creates an **unpublished** Wix Blog draft. Confirm the Wix AI model permission and available credits. Verify the owner/installing-user billing behavior before treating the credit requirement as proven.
+The test command runs the test runner, authorization, workflow, and UI-preview suites.
 
-## Important limitations
+## Important behavior and limitations
 
-- Wix AI APIs are Developer Preview.
-- This branch's code changes do not themselves grant the new Wix permission scope or install Wix Blog on the development site.
-- A successful build or mocked test does not verify live Wix AI authorization, credit billing identity, or Wix Blog draft creation.
-- No app release or production site settings are changed by these source changes.
+- Wix AI APIs may be Developer Preview; verify their current availability and behavior in the development app.
+- Research URLs are fetched and validated by the server. Webpage excerpts are treated as untrusted content, not instructions.
+- Images and sampled video frames can inform AI generation. Audio and document/archive contents are not transcribed or parsed by the AI; those files are included as media or download references.
+- Uploaded article assets are public Wix Media Manager files so Blog visitors can load them. Do not upload private or sensitive files.
+- Wix processes media uploads asynchronously. Draft creation stops with a retryable message until uploaded assets are ready.
+- The draft submission guard reduces duplicate attempts but cannot guarantee exactly-once delivery across server restarts or uncertain network failures.
+- A successful build or mocked test does not verify live Wix authentication, permission approval, AI credit billing, media processing, or Wix Blog draft creation.
+- Source changes do not themselves approve new Wix permission scopes or install Wix Blog on a site.

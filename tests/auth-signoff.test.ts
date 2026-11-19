@@ -228,7 +228,7 @@ describe("server-side authentication and authorization", () => {
       const response = await getWorkflowAccess({} as never);
       const body = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(503);
       expect(body.error).toEqual(expect.any(String));
       expect(body.authorized).not.toBe(true);
     });
