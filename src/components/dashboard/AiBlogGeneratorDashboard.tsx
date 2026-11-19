@@ -1,11 +1,11 @@
 import { Page, WixDesignSystemProvider } from "@wix/design-system";
 import "@wix/design-system/styles.global.css";
-import styles from "./ai-blog-generator.module.css";
-import CreditsPanel from "./components/CreditsPanel";
-import MemberAccessPanel from "./components/MemberAccessPanel";
-import SetupStatusPanel from "./components/SetupStatusPanel";
-import SummaryCards from "./components/SummaryCards";
-import { useAdminDashboard } from "./hooks/useAdminDashboard";
+import styles from "./AiBlogGeneratorDashboard.module.css";
+import CreditsPanel from "../../extensions/dashboard/pages/ai-blog-generator/components/CreditsPanel";
+import MemberAccessPanel from "../../extensions/dashboard/pages/ai-blog-generator/components/MemberAccessPanel";
+import SetupStatusPanel from "../../extensions/dashboard/pages/ai-blog-generator/components/SetupStatusPanel";
+import SummaryCards from "../../extensions/dashboard/pages/ai-blog-generator/components/SummaryCards";
+import { useAdminDashboard } from "../../extensions/dashboard/pages/ai-blog-generator/hooks/useAdminDashboard";
 
 export default function DashboardPage() {
   const dashboard = useAdminDashboard();
@@ -88,7 +88,6 @@ export default function DashboardPage() {
               accessStorageAvailable={dashboard.accessStorageAvailable}
               blogStatusCopy={blogStatusCopy}
               blogStatusDot={blogStatusDot}
-              blogInventoryDiagnostic={blogInventoryDiagnostic}
               onRecheck={dashboard.recheckSetup}
             />
 
