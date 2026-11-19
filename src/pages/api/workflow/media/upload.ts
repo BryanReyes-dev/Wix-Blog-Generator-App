@@ -90,7 +90,7 @@ export const POST: APIRoute = async ({ request }) => {
       const url = new URL(request.url);
       fileName = url.searchParams.get("fileName") ?? "";
       mimeType = contentType;
-      if (!fileName || fileName.length > 255 || /[\\/\\u0000-\\u001f]/.test(fileName)) {
+      if (!fileName || fileName.length > 255 || fileName.includes("/") || fileName.includes("\\") || /[\x00-\x1f]/.test(fileName)) {
         return jsonResponse({ error: "The uploaded image filename is missing or invalid." }, 400);
       }
       const contentLength = Number(request.headers.get("content-length") ?? 0);
