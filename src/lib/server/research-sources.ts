@@ -449,7 +449,7 @@ async function readResponseText(response: Response, maxBytes: number): Promise<s
 async function fetchResearchPage(
   initialUrl: URL,
   config: Required<Pick<ResearchSourceLoaderConfig, 'fetchImpl' | 'resolveHost' | 'timeoutMs' | 'maxBytes'>>,
-): Promise<{ url: URL; title: string; excerpt: string }> {
+): Promise<{ url: URL; title: string; excerpt: string; httpStatus: number; contentType: string }> {
   let currentUrl = initialUrl;
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
@@ -525,7 +525,7 @@ async function fetchResearchPage(
 
     const text = await readResponseText(response, config.maxBytes);
     const extracted = extractResearchPage(text, currentUrl, contentType);
-    return { url: currentUrl, ...extracted };
+    return { url: currentUrl, ...extracted, httpStatus: response.status, contentType };
   }
 
   throw new ResearchSourceError('A research link could not be retrieved.', 422);
@@ -585,7 +585,8 @@ export async function loadResearchSourcesIndividually(
         sourceId,
         linkId: link.id,
         hostname,
-        httpStatus: 200,
+        httpStatus: page.httpStatus,
+        contentType: page.contentType,
         durationMs,
       });
       return {
