@@ -4,14 +4,17 @@ on:
   push:
     branches:
       - test/auth-sign-off
+      - debug/integrate-feature-branches
   pull_request:
     branches:
       - main
-      - chore/wix-astro7-upgrade
     paths:
-      - "src/lib/server/**"
-      - "src/pages/api/**"
-      - "src/extensions/site/widgets/member-login-test/**"
+      - "src/lib/**"
+      - "src/pages/**"
+      - "src/extensions/backend/**"
+      - "src/extensions/dashboard/**"
+      - "src/extensions/site/widgets/member-login/**"
+      - "src/components/**"
       - "src/styles/**"
       - "tailwind.config.cjs"
       - "postcss.config.cjs"
