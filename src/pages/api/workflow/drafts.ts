@@ -5,8 +5,8 @@ import { files } from '@wix/media';
 import { auth } from '@wix/essentials';
 import { handleApiError, jsonResponse, requireApprovedSiteMember } from '../../../lib/server/access-control';
 import { ApiError } from '../../../lib/server/authorization-core';
-import { bodyToRichContent, InputValidationError, parseDraftSubmission, type WixRichContent } from '../../../lib/server/blog-content';
-import { articleDocumentToPlainText, articleDocumentToRichContent, ArticleDocumentError, parseArticleDocument } from '../../../lib/article-document';
+import { bodyToRichContent, InputValidationError, parseDraftSubmission, type WixRichContent } from '../../../lib/blog-content';
+import { articleDocumentToPlainText, articleDocumentToRichContent, ArticleDocumentError, parseArticleDocument, type ArticleDocument } from '../../../lib/article-document';
 import { runDraftSubmission } from '../../../lib/server/draft-submissions';
 import { isWixBlogInstalled } from '../../../lib/server/wix-blog-installation';
 import { parseResearchCitationSources, ResearchSourceError } from '../../../lib/server/research-sources';
@@ -55,6 +55,90 @@ async function verifyWixBlogInstalled(): Promise<void> {
   }
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function imageMimeTypeFromName(name: string): string | null {
+  const extension = name.split('.').pop()?.toLowerCase();
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  if (extension === 'gif') return 'image/gif';
+  return null;
+}
+
+async function verifyArticleMediaOwnership(document: ArticleDocument): Promise<void> {
+  const images = document.blocks.filter((block) => block.type === 'image');
+  if (images.length === 0) return;
+
+  const getFileDescriptor = auth.elevate(files.getFileDescriptor);
+  const seenUploadTokens = new Set<string>();
+
+  for (const block of images) {
+    const media = block.media;
+    if (seenUploadTokens.has(media.uploadToken)) {
+      throw new ArticleDocumentError('Each article image must come from a separate verified upload.');
+    }
+    seenUploadTokens.add(media.uploadToken);
+
+    let response: unknown;
+    try {
+      response = await getFileDescriptor(media.id);
+    } catch {
+      throw new ApiError(404, 'One of the article images could not be found in Wix Media Manager.');
+    }
+
+    const outer = asRecord(response);
+    const descriptor = outer && asRecord(outer.file)
+      ? asRecord(outer.file)
+      : outer;
+    if (!descriptor) {
+      throw new ApiError(400, 'Wix Media Manager returned an invalid image descriptor.');
+    }
+
+    const displayName = typeof descriptor.displayName === 'string'
+      ? descriptor.displayName
+      : '';
+    const uploadPrefix = 'blog-editor-' + media.uploadToken + '-';
+    if (!displayName.startsWith(uploadPrefix)) {
+      throw new ApiError(403, 'An article image does not belong to a verified upload session for this editor.');
+    }
+
+    const id = typeof descriptor._id === 'string'
+      ? descriptor._id
+      : typeof descriptor.id === 'string'
+        ? descriptor.id
+        : '';
+    const fileUrl = typeof descriptor.url === 'string' ? descriptor.url : '';
+    let parsedUrl: URL | null = null;
+    try {
+      parsedUrl = new URL(fileUrl);
+    } catch {
+      parsedUrl = null;
+    }
+
+    const mimeType = imageMimeTypeFromName(displayName.slice(uploadPrefix.length));
+    if (
+      id !== media.id ||
+      descriptor.mediaType !== 'IMAGE' ||
+      descriptor.operationStatus !== 'READY' ||
+      descriptor.state !== 'OK' ||
+      descriptor.private !== false ||
+      mimeType !== media.mimeType ||
+      !parsedUrl ||
+      parsedUrl.protocol !== 'https:' ||
+      parsedUrl.hostname !== 'static.wixstatic.com' ||
+      !parsedUrl.pathname.startsWith('/media/') ||
+      parsedUrl.href !== media.url
+    ) {
+      throw new ApiError(422, 'Wix Media Manager could not verify one of the article images. Re-upload the image before saving.');
+    }
+  }
+}
+
 export const POST: APIRoute = async ({ request }) => {
   try {
     const member = await requireApprovedSiteMember();
@@ -70,104 +154,127 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonResponse({ error: 'Send a valid JSON request body.' }, 400);
     }
 
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new InputValidationError('Send a valid JSON object.');
+    }
     const requestBody = body as Record<string, unknown>;
     const submission = parseDraftSubmission(body);
     const citationSources = parseResearchCitationSources(requestBody.researchSources);
-    const mediaInputs = parseDraftMediaInputs(requestBody.mediaAssets);
-    const placementIds = new Set(submission.mediaPlacements.map((placement) => placement.referenceId));
-    if (placementIds.size !== submission.mediaPlacements.length ||
+
+    let richContent: WixRichContent;
+    if (requestBody.articleDocument !== undefined) {
+      if (requestBody.generatedByMemberId !== member.memberId) {
+        throw new ApiError(403, 'The generated article does not belong to the currently signed-in Wix member. Generate it again before saving.');
+      }
+
+      const articleDocument = parseArticleDocument(requestBody.articleDocument);
+      if (articleDocumentToPlainText(articleDocument) !== submission.body) {
+        throw new InputValidationError('The article text does not match the structured editorial document. Refresh the editor and try again.');
+      }
+
+      await verifyArticleMediaOwnership(articleDocument);
+      richContent = articleDocumentToRichContent(
+        articleDocument,
+        citationSources,
+      ) as unknown as WixRichContent;
+    } else {
+      const mediaInputs = parseDraftMediaInputs(requestBody.mediaAssets);
+      const placementIds = new Set(submission.mediaPlacements.map((placement) => placement.referenceId));
+      if (
+        placementIds.size !== submission.mediaPlacements.length ||
         mediaInputs.length !== submission.mediaPlacements.length ||
-        mediaInputs.some((media) => !placementIds.has(media.referenceId))) {
-      throw new InputValidationError('Every uploaded media file must have exactly one article placement.');
+        mediaInputs.some((media) => !placementIds.has(media.referenceId))
+      ) {
+        throw new InputValidationError('Every uploaded media file must have exactly one article placement.');
+      }
+
+      const sourcesSection = citationSources.length
+        ? '\n\n## Sources\n\n' + citationSources
+            .map((source) => '- [' + source.id + '] ' + source.title.replace(/[\\r\\n]+/g, ' ') + ' — ' + source.url)
+            .join('\n')
+        : '';
+
+      const mediaAssets = mediaInputs.length > 0
+        ? await (async () => {
+            const getFileDescriptor = auth.elevate(files.getFileDescriptor);
+            const descriptors = await Promise.all(
+              mediaInputs.map((media) => getFileDescriptor(media.fileId)),
+            );
+            const descriptorsById = new Map(
+              descriptors.map((descriptor) => [descriptor._id, descriptor] as const),
+            );
+
+            return mediaInputs.map((media) => {
+              const descriptor = descriptorsById.get(media.fileId);
+              if (!descriptor || typeof descriptor.url !== 'string' || !descriptor.url.startsWith('https://')) {
+                throw new ApiError(400, 'One of the uploaded media files could not be verified in Wix Media Manager.');
+              }
+              if (descriptor.operationStatus !== 'READY') {
+                throw new ApiError(409, 'Wix is still processing ' + media.name + '. Wait a little and try creating the draft again.');
+              }
+
+              const allowedTypes: Record<string, string[]> = {
+                image: ['IMAGE', 'VECTOR'],
+                video: ['VIDEO'],
+                audio: ['AUDIO'],
+                document: ['DOCUMENT', 'ARCHIVE', 'OTHER'],
+              };
+              if (!(allowedTypes[media.kind] ?? []).includes(String(descriptor.mediaType))) {
+                throw new ApiError(400, 'The uploaded file type for ' + media.name + ' does not match its article media type.');
+              }
+
+              const mediaDescriptor = descriptor.media && typeof descriptor.media === 'object'
+                ? descriptor.media as Record<string, unknown>
+                : {};
+              const rawImage = mediaDescriptor.image && typeof mediaDescriptor.image === 'object'
+                ? mediaDescriptor.image as Record<string, unknown>
+                : {};
+              const nestedImage = rawImage.image && typeof rawImage.image === 'object'
+                ? rawImage.image as Record<string, unknown>
+                : rawImage;
+              const imageMediaUri = typeof rawImage.image === 'string' ? rawImage.image : '';
+              const rawVideo = mediaDescriptor.video;
+              const videoUri = typeof rawVideo === 'string'
+                ? rawVideo
+                : rawVideo && typeof rawVideo === 'object' && typeof (rawVideo as Record<string, unknown>).video === 'string'
+                  ? String((rawVideo as Record<string, unknown>).video)
+                  : '';
+              const videoId = /^wix:video:\/\/v1\/([^/]+)/.exec(videoUri)?.[1];
+              const posterId = /[?&#]posterUri=([^&#]+)/.exec(videoUri)?.[1];
+              const uriWidth = /[?&#]originWidth=(\\d+)/.exec(imageMediaUri)?.[1];
+              const uriHeight = /[?&#]originHeight=(\\d+)/.exec(imageMediaUri)?.[1];
+              const descriptorWidth = typeof nestedImage.width === 'number' ? nestedImage.width : Number(uriWidth) || media.width;
+              const descriptorHeight = typeof nestedImage.height === 'number' ? nestedImage.height : Number(uriHeight) || media.height;
+              const nestedVideo = rawVideo && typeof rawVideo === 'object' ? rawVideo as Record<string, unknown> : {};
+              const duration = typeof nestedVideo.duration === 'number' ? nestedVideo.duration : media.durationSeconds;
+
+              return {
+                ...media,
+                fileUrl: descriptor.url,
+                ...(typeof descriptor.thumbnailUrl === 'string' ? { thumbnailUrl: descriptor.thumbnailUrl } : {}),
+                ...(media.kind === 'image' ? {
+                  ...(typeof descriptorWidth === 'number' ? { width: descriptorWidth } : {}),
+                  ...(typeof descriptorHeight === 'number' ? { height: descriptorHeight } : {}),
+                } : {}),
+                ...(media.kind === 'video' ? {
+                  ...(typeof duration === 'number' && duration > 0 ? { durationSeconds: duration } : {}),
+                  videoMediaId: 'video/' + (videoId ?? media.fileId) + '/1080p/mp4/file.mp4',
+                  ...(posterId ? { videoThumbnailId: 'media/' + posterId } : {}),
+                } : {}),
+              };
+            });
+          })()
+        : [];
+
+      richContent = bodyToRichContent(
+        submission.body + sourcesSection,
+        citationSources,
+        mediaAssets,
+        submission.mediaPlacements,
+        submission.sectionLayouts,
+      );
     }
 
-    const sourcesSection = citationSources.length
-      ? '\n\n## Sources\n\n' + citationSources
-          .map((source) => '- [' + source.id + '] ' + source.title.replace(/[\r\n]+/g, ' ') + ' — ' + source.url)
-          .join('\n')
-      : '';
-
-    const mediaAssets = mediaInputs.length > 0
-      ? await (async () => {
-          const getFileDescriptor = auth.elevate(files.getFileDescriptor);
-          const descriptors = await Promise.all(
-            mediaInputs.map((media) => getFileDescriptor(media.fileId)),
-          );
-          const descriptorsById = new Map(
-            descriptors.map((descriptor) => [descriptor._id, descriptor] as const),
-          );
-
-          return mediaInputs.map((media) => {
-            const descriptor = descriptorsById.get(media.fileId);
-            if (!descriptor || typeof descriptor.url !== 'string' || !descriptor.url.startsWith('https://')) {
-              throw new ApiError(400, 'One of the uploaded media files could not be verified in Wix Media Manager.');
-            }
-            if (descriptor.operationStatus !== 'READY') {
-              throw new ApiError(409, 'Wix is still processing ' + media.name + '. Wait a little and try creating the draft again.');
-            }
-
-            const allowedTypes: Record<string, string[]> = {
-              image: ['IMAGE', 'VECTOR'],
-              video: ['VIDEO'],
-              audio: ['AUDIO'],
-              document: ['DOCUMENT', 'ARCHIVE', 'OTHER'],
-            };
-            if (!(allowedTypes[media.kind] ?? []).includes(String(descriptor.mediaType))) {
-              throw new ApiError(400, 'The uploaded file type for ' + media.name + ' does not match its article media type.');
-            }
-
-            const mediaDescriptor = descriptor.media && typeof descriptor.media === 'object'
-              ? descriptor.media as Record<string, unknown>
-              : {};
-            const rawImage = mediaDescriptor.image && typeof mediaDescriptor.image === 'object'
-              ? mediaDescriptor.image as Record<string, unknown>
-              : {};
-            const nestedImage = rawImage.image && typeof rawImage.image === 'object'
-              ? rawImage.image as Record<string, unknown>
-              : rawImage;
-            const imageMediaUri = typeof rawImage.image === 'string' ? rawImage.image : '';
-            const rawVideo = mediaDescriptor.video;
-            const videoUri = typeof rawVideo === 'string'
-              ? rawVideo
-              : rawVideo && typeof rawVideo === 'object' && typeof (rawVideo as Record<string, unknown>).video === 'string'
-                ? String((rawVideo as Record<string, unknown>).video)
-                : '';
-            const videoId = /^wix:video:\/\/v1\/([^/]+)/.exec(videoUri)?.[1];
-            const posterId = /[?&#]posterUri=([^&#]+)/.exec(videoUri)?.[1];
-            const uriWidth = /[?&#]originWidth=(\\d+)/.exec(imageMediaUri)?.[1];
-            const uriHeight = /[?&#]originHeight=(\\d+)/.exec(imageMediaUri)?.[1];
-            const descriptorWidth = typeof nestedImage.width === 'number' ? nestedImage.width : Number(uriWidth) || media.width;
-            const descriptorHeight = typeof nestedImage.height === 'number' ? nestedImage.height : Number(uriHeight) || media.height;
-            const nestedVideo = rawVideo && typeof rawVideo === 'object' ? rawVideo as Record<string, unknown> : {};
-            const duration = typeof nestedVideo.duration === 'number' ? nestedVideo.duration : media.durationSeconds;
-
-            return {
-              ...media,
-              fileUrl: descriptor.url,
-              ...(typeof descriptor.thumbnailUrl === 'string' ? { thumbnailUrl: descriptor.thumbnailUrl } : {}),
-              ...(media.kind === 'image' ? {
-                ...(typeof descriptorWidth === 'number' ? { width: descriptorWidth } : {}),
-                ...(typeof descriptorHeight === 'number' ? { height: descriptorHeight } : {}),
-              } : {}),
-              ...(media.kind === 'video' ? {
-                ...(typeof duration === 'number' && duration > 0 ? { durationSeconds: duration } : {}),
-                videoMediaId: 'video/' + (videoId ?? media.fileId) + '/1080p/mp4/file.mp4',
-                ...(posterId ? { videoThumbnailId: 'media/' + posterId } : {}),
-              } : {}),
-            };
-          });
-        })()
-      : [];
-
-    const richContent = bodyToRichContent(
-      submission.body + sourcesSection,
-      citationSources,
-      mediaAssets,
-      submission.mediaPlacements,
-      submission.sectionLayouts,
-    );
-
-    await verifyArticleMediaOwnership(articleDocument);
     await verifyWixBlogInstalled();
 
     const result = await runDraftSubmission(
@@ -268,7 +375,7 @@ export const POST: APIRoute = async ({ request }) => {
     if (error instanceof MediaReferenceError) {
       return jsonResponse({ error: error.message }, 400);
     }
-    if (error instanceof InputValidationError) {
+    if (error instanceof InputValidationError || error instanceof ArticleDocumentError) {
       return jsonResponse({ error: error.message }, 400);
     }
     return handleApiError(error);
