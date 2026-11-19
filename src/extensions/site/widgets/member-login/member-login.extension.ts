@@ -6,7 +6,6 @@ export default extensions.customElement({
   width: {
     defaultWidth: 900,
     allowStretch: true,
-    stretchByDefault: true,
   },
   height: {
     defaultHeight: 240,
@@ -14,9 +13,10 @@ export default extensions.customElement({
   installation: {
     autoAdd: false,
   },
-  tagName: "member-login",
+  // Preserve the registered tag so existing Wix Editor placements remain connected.
+  tagName: "member-login-test",
   element: "./extensions/site/widgets/member-login/member-login.tsx",
-  settings: "./extensions/site/widgets/member-login/member-login.panel.tsx",
+  settings: "./components/member/MemberLoginSettingsPanel.tsx",
   presets: [
     {
       id: "4a7e3f12-9c6b-4d81-a250-8e3b6f9c1d74",
