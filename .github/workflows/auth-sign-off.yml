@@ -75,9 +75,9 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
         with:
-          # On push events, use the branch head after lockfile sync; PR events
-          # use GitHub's synthetic merge ref to validate against the base.
-          ref: ${{ github.event_name == 'push' && 'test/auth-sign-off' || github.sha }}
+          # For pushes, validate the branch that triggered the workflow.
+          # Pull requests use GitHub's synthetic merge ref.
+          ref: ${{ github.event_name == 'push' && github.ref_name || github.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
