@@ -290,7 +290,10 @@ export function parseResearchLinkEntries(value: unknown): ResearchLinkEntry[] {
   const normalizedEntries = entries.map((entry, index): ResearchLinkEntry | null => {
     if (typeof entry === 'string') {
       const url = entry.trim();
-      return url ? { id: 'research-link-' + (index + 1), url, notes: '' } : null;
+      if (!url) return null;
+      const id = 'research-link-' + (index + 1);
+      usedIds.add(id);
+      return { id, url, notes: '' };
     }
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       throw new ResearchSourceError(`Research link ${index + 1} is invalid.`, 400);
@@ -573,7 +576,7 @@ export async function loadResearchSourcesIndividually(
         id: sourceId,
         title: page.title,
         url: page.url.href,
-        publisher: page.url.hostname.replace(/^www\\./, ''),
+        publisher: page.url.hostname.replace(/^www\./, ''),
         retrievedAt: config.now().toISOString(),
         excerpt: page.excerpt,
       };
