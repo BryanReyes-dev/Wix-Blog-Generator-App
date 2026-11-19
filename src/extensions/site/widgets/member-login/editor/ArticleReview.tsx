@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { httpClient } from "@wix/essentials";
+import { apiFetch } from "../../../../../lib/client/api";
 import type { ArticleDocument, ArticleMedia } from "../../../../../lib/article-document";
 import { articleBodyToDocument, articleDocumentToPlainText } from "../../../../../lib/article-document";
 import ArticleEditor from "./ArticleEditor";
@@ -7,7 +7,6 @@ import ArticlePreview from "./ArticlePreview";
 import { EditorIcon } from "./EditorIcon";
 import type { MemberIdentity, ReviewData } from "../types";
 
-const API_BASE_URL = new URL(import.meta.url).origin;
 const CONTROL = "mt-1 min-h-10 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-sm text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--focus)]";
 const BUTTON = "inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-[var(--border-strong)] bg-[var(--surface-raised)] px-3 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-50";
 const PRIMARY = "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[var(--accent)] px-4 text-sm font-bold text-[var(--accent-text)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50";
@@ -87,7 +86,7 @@ async function uploadOriginalImage(file: File): Promise<ArticleMedia> {
   const dimensions = await imageDimensions(file);
   const form = new FormData();
   form.set("file", file);
-  const uploadResponse = await httpClient.fetchWithAuth(API_BASE_URL + "/api/workflow/media/upload", {
+  const uploadResponse = await apiFetch("/api/workflow/media/upload", {
     method: "POST",
     body: form,
   });
@@ -102,7 +101,7 @@ async function uploadOriginalImage(file: File): Promise<ArticleMedia> {
   const query = new URLSearchParams({ fileId, uploadToken });
 
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    const statusResponse = await httpClient.fetchWithAuth(API_BASE_URL + "/api/workflow/media/status?" + query.toString());
+    const statusResponse = await apiFetch("/api/workflow/media/status?" + query.toString());
     const statusPayload = await readJson(statusResponse);
     if (!statusResponse.ok && statusResponse.status !== 202) {
       const message = isRecord(statusPayload) && typeof statusPayload.error === "string"
@@ -197,7 +196,7 @@ export default function ArticleReview({ review, identity, reportStatus }: Props)
       const activeSubmissionId = submissionId ?? createSubmissionId();
       setSubmissionId(activeSubmissionId);
       const body = articleDocumentToPlainText(document);
-      const response = await httpClient.fetchWithAuth(API_BASE_URL + "/api/workflow/drafts", {
+      const response = await apiFetch("/api/workflow/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
