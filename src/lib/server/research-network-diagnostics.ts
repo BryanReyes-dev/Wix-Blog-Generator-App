@@ -1,4 +1,4 @@
-import { resolveHostname } from './research-sources';
+import { resolveHostname } from './research-sources.ts';
 
 const PROBE_HOSTNAME = 'www.wikipedia.org';
 const PROBE_URL = 'https://www.wikipedia.org/';
