@@ -27,7 +27,7 @@ export type ResearchLinkEntry = { id: string; url: string; notes: string };
 
 export type ResearchLinkDiagnostic = {
   code: string;
-  stage: 'fetch';
+  stage: 'dns_lookup' | 'fetch';
   errorName?: string;
   errorMessage?: string;
   causeName?: string;
@@ -94,7 +94,7 @@ function normalizeDiagnosticToken(value: string): string {
   return value.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || 'UNKNOWN';
 }
 
-function describeFetchFailure(error: unknown): Pick<
+function describeFetchFailure(error: unknown, prefix = 'FETCH'): Pick<
   ResearchSourceDiagnostics,
   'diagnosticCode' | 'errorName' | 'errorMessage' | 'causeName' | 'causeCode' | 'causeMessage'
 > {
@@ -118,7 +118,7 @@ function describeFetchFailure(error: unknown): Pick<
   const codeToken = causeCode ?? causeName ?? errorName ?? 'UNKNOWN';
 
   return {
-    diagnosticCode: 'FETCH_' + normalizeDiagnosticToken(codeToken),
+    diagnosticCode: prefix + '_' + normalizeDiagnosticToken(codeToken),
     errorName,
     errorMessage: sanitizeDiagnosticText(root?.message),
     causeName,
@@ -226,7 +226,7 @@ function isPublicAddress(address: ResolvedAddress): boolean {
   return false;
 }
 
-const resolveHostname: ResolveHost = async (hostname) => {
+export const resolveHostname: ResolveHost = async (hostname) => {
   const recordTypes = [
     { type: 1, family: 4 },
     { type: 28, family: 6 },
@@ -279,14 +279,13 @@ export async function validateResearchUrl(
   try {
     addresses = await resolveHost(url.hostname);
   } catch (error) {
-    const record = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+    const networkDiagnostics = describeFetchFailure(error, 'DNS');
     throw new ResearchSourceError(
       'The website hostname could not be verified. This may be a temporary DNS or network issue.',
       422,
       {
         stage: 'dns_lookup',
-        causeName: typeof record.name === 'string' ? record.name.slice(0, 80) : undefined,
-        causeCode: typeof record.code === 'string' ? record.code.slice(0, 80) : undefined,
+        ...networkDiagnostics,
       },
     );
   }
@@ -730,10 +729,13 @@ export async function loadResearchSourcesIndividually(
         durationMs: Date.now() - startedAt,
         message,
       });
-      const diagnostic: ResearchLinkDiagnostic | undefined = diagnostics?.diagnosticCode
+      const diagnosticStage = diagnostics?.stage === 'dns_lookup' || diagnostics?.stage === 'fetch'
+        ? diagnostics.stage
+        : undefined;
+      const diagnostic: ResearchLinkDiagnostic | undefined = diagnostics?.diagnosticCode && diagnosticStage
         ? {
             code: diagnostics.diagnosticCode,
-            stage: 'fetch',
+            stage: diagnosticStage,
             errorName: diagnostics.errorName,
             errorMessage: diagnostics.errorMessage,
             causeName: diagnostics.causeName,
