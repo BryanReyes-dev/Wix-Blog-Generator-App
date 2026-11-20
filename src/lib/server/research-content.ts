@@ -219,7 +219,6 @@ export const extractResearchPdf: ResearchPdfParser = async (bytes, maxPages, max
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const loadingTask = getDocument({
     data: bytes,
-    isEvalSupported: false,
     enableXfa: false,
     useSystemFonts: false,
     stopAtErrors: true,
