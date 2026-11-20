@@ -24,7 +24,14 @@ import { createSubmissionGate } from '../src/lib/server/draft-submissions.ts';
 import { AI_GENERATION_TIMEOUT_MS, AiProviderError, generateBlogArticle } from '../src/lib/server/generate-blog-article.ts';
 import { isWixBlogInstalled } from '../src/lib/server/wix-blog-installation.ts';
 import { getMediaFileInfo } from '../src/lib/media-file-types.ts';
-import { loadResearchSources, loadResearchSourcesIndividually, parseResearchLinkEntries } from '../src/lib/server/research-sources.ts';
+import {
+  extractResearchPage,
+  loadResearchSources,
+  loadResearchSourcesIndividually,
+  MAX_RESEARCH_PDF_PAGES,
+  MAX_RESEARCH_RESPONSE_BYTES,
+  parseResearchLinkEntries,
+} from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
 
@@ -679,6 +686,93 @@ test('duplicate research URLs are reported against the later row only', async ()
   assert.match(result.checks[1].message, /duplicates an earlier research link/i);
   assert.equal(result.sources.length, 1);
   assert.equal(requests, 1);
+});
+
+test('research HTML extraction prefers article content and excludes common page chrome', () => {
+  const html = '<html><head><title>Winter Wardrobe Guide</title></head><body>' +
+    '<nav><p>Navigation text that should never be supplied to the model.</p></nav>' +
+    '<main><article class="article-content"><h1>Winter Wardrobe Guide</h1>' +
+    '<p>A practical article paragraph with information about layering and winter clothing.</p>' +
+    '<p>Another paragraph with useful information about coats, footwear, and cold weather.</p>' +
+    '</article><aside class="related-articles"><p>Related content that should not be imported.</p></aside></main>' +
+    '<footer><p>Footer text that should never be supplied to the model.</p></footer></body></html>';
+  const result = extractResearchPage(html, new URL('https://public.example.org/winter'));
+  assert.equal(result.title, 'Winter Wardrobe Guide');
+  assert.match(result.excerpt, /layering and winter clothing/);
+  assert.doesNotMatch(result.excerpt, /Navigation text|Related content|Footer text/);
+});
+
+test('HTML research pages larger than 1 MiB are fetched while model excerpts stay bounded', async () => {
+  const repeatedParagraph = '<p>' + 'A detailed winter clothing paragraph. '.repeat(36_000) + '</p>';
+  const html = '<html><head><title>Large Article</title></head><body><article>' + repeatedParagraph + '</article></body></html>';
+  assert.ok(new TextEncoder().encode(html).byteLength > 1_048_576);
+  assert.ok(new TextEncoder().encode(html).byteLength < MAX_RESEARCH_RESPONSE_BYTES);
+
+  const result = await loadResearchSourcesIndividually([
+    { id: 'large-article', url: 'https://public.example.org/large-article', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } }),
+  });
+
+  assert.equal(result.checks[0].status, 'success');
+  assert.equal(result.sources[0].excerpt.length, 6_000);
+});
+
+test('text-based research PDFs are extracted live with page and character limits', async () => {
+  const pdfBytes = new TextEncoder().encode('%PDF-1.7 mock PDF bytes');
+  let parserLimits;
+  const result = await loadResearchSourcesIndividually([
+    { id: 'pdf-report', url: 'https://public.example.org/report.pdf', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => new Response(pdfBytes, { status: 200, headers: { 'content-type': 'application/pdf' } }),
+    parsePdf: async (_bytes, maxPages, maxCharacters) => {
+      parserLimits = { maxPages, maxCharacters };
+      return {
+        title: 'Winter Climate Report',
+        pageCount: 2,
+        pageTexts: ['A sufficiently long extracted PDF passage about winter climate and layering.'],
+      };
+    },
+  });
+
+  assert.equal(result.checks[0].status, 'success');
+  assert.equal(result.sources[0].title, 'Winter Climate Report');
+  assert.equal(result.sources[0].publisher, 'public.example.org');
+  assert.deepEqual(parserLimits, { maxPages: MAX_RESEARCH_PDF_PAGES, maxCharacters: 6_000 });
+});
+
+test('research PDFs over the configured byte limit are rejected before parsing', async () => {
+  let parserCalled = false;
+  const pdfBytes = new Uint8Array(32).fill(37);
+  const result = await loadResearchSourcesIndividually([
+    { id: 'oversized-pdf', url: 'https://public.example.org/oversized.pdf', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => new Response(pdfBytes, { status: 200, headers: { 'content-type': 'application/pdf' } }),
+    maxPdfBytes: 16,
+    parsePdf: async () => { parserCalled = true; return { pageCount: 1, pageTexts: ['valid enough text for the parser output'] }; },
+  });
+
+  assert.equal(result.checks[0].status, 'error');
+  assert.match(result.checks[0].message, /larger than the 5 MiB research limit/i);
+  assert.equal(parserCalled, false);
+});
+
+test('research PDFs over the page limit are rejected per link', async () => {
+  const pdfBytes = new TextEncoder().encode('%PDF-1.7 mock PDF bytes');
+  const result = await loadResearchSourcesIndividually([
+    { id: 'long-pdf', url: 'https://public.example.org/long-report.pdf', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => new Response(pdfBytes, { status: 200, headers: { 'content-type': 'application/pdf' } }),
+    parsePdf: async () => ({ title: 'Long Report', pageCount: 21, pageTexts: [] }),
+  });
+
+  assert.equal(result.checks[0].status, 'error');
+  assert.match(result.checks[0].message, /more than 20 pages/i);
+  assert.equal(result.sources.length, 0);
 });
 
 test('Wix AI generation is configured to wait five minutes before timing out', () => {
