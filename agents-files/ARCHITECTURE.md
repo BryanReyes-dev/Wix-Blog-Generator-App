@@ -87,7 +87,7 @@ Brief + optional research links + derived visual reference frames
   → editable article + sources returned to the React widget
 ```
 
-Research retrieval validates public destinations and redirects, applies time/size limits, and returns bounded excerpts. Page contents and notes are untrusted context, not instructions. Generated citation markers must match source IDs actually retrieved.
+Research retrieval fetches each source live, validates public destinations and redirects, and applies independent response-size and processing limits. HTML is parsed structurally to prefer article content and skip common navigation/advertising/related-content regions. Text-based PDFs can be parsed up to 5 MiB and 20 pages; scanned PDFs requiring OCR are rejected with an actionable message. The model receives only a bounded excerpt (up to 6,000 characters), not the full document. Page contents and notes are untrusted context, not instructions. Generated citation markers must match source IDs actually retrieved.
 
 Generation-page image references are converted to JPEG frames, and video references are sampled into still frames. These derivatives are provided only as AI visual context; they are not article media.
 

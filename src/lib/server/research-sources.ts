@@ -1,8 +1,15 @@
 import type { GeneratedArticle } from '../blog-content';
+import {
+  extractResearchHtml,
+  extractResearchPdf,
+  type ResearchPdfParser,
+} from './research-content.ts';
 
 export const MAX_RESEARCH_SOURCES = 5;
 export const MAX_RESEARCH_URL_LENGTH = 2_048;
-export const MAX_RESEARCH_RESPONSE_BYTES = 1_048_576;
+export const MAX_RESEARCH_RESPONSE_BYTES = 5 * 1_048_576;
+export const MAX_RESEARCH_PDF_BYTES = 5 * 1_048_576;
+export const MAX_RESEARCH_PDF_PAGES = 20;
 export const MAX_RESEARCH_EXCERPT_CHARS = 6_000;
 const MAX_REDIRECTS = 3;
 
@@ -60,6 +67,8 @@ export type ResearchSourceLoaderConfig = {
   resolveHost?: ResolveHost;
   timeoutMs?: number;
   maxBytes?: number;
+  maxPdfBytes?: number;
+  parsePdf?: ResearchPdfParser;
   now?: () => Date;
 };
 
@@ -365,55 +374,39 @@ export function extractResearchPage(
   url: URL,
   contentType = 'text/html',
 ): { title: string; excerpt: string } {
-  let title = '';
-  let text = html;
-
   if (contentType.toLowerCase().includes('text/plain')) {
-    text = decodeHtmlEntities(html);
-  } else {
-    const titleMatch = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(html);
-    if (titleMatch?.[1]) title = decodeHtmlEntities(titleMatch[1].replace(/<[^>]*>/g, ' ')).trim();
-
-    const descriptionMatch =
-      /<meta\b[^>]*name\s*=\s*["']description["'][^>]*content\s*=\s*["']([^"']*)["'][^>]*>/i.exec(html) ??
-      /<meta\b[^>]*content\s*=\s*["']([^"']*)["'][^>]*name\s*=\s*["']description["'][^>]*>/i.exec(html);
-    const description = descriptionMatch?.[1] ? decodeHtmlEntities(descriptionMatch[1]).trim() : '';
-
-    text = html
-      .replace(/<!--[\s\S]*?-->/g, ' ')
-      .replace(/<(script|style|noscript|svg|nav|header|footer|aside|form|button|template|iframe|canvas)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
-      .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/article|\/section|\/main|\/blockquote|\/tr|\/td)\b[^>]*>/gi, '\n')
-      .replace(/<[^>]+>/g, ' ')
+    const text = decodeHtmlEntities(html)
       .replace(/[\t\f\v ]+/g, ' ')
       .replace(/\s*\n\s*/g, '\n')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-
-    if (description && !text.toLowerCase().includes(description.toLowerCase())) {
-      text = description + '\n\n' + text;
+    if (text.length < 40) {
+      throw new ResearchSourceError('A research link did not contain enough readable page text to use.', 422, {
+        stage: 'content_extraction',
+      });
     }
+    return { title: fallbackTitle(url), excerpt: text.slice(0, MAX_RESEARCH_EXCERPT_CHARS) };
   }
 
-  text = decodeHtmlEntities(text)
-    .replace(/[\t\f\v ]+/g, ' ')
-    .replace(/\s*\n\s*/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  if (text.length < 40) {
-    throw new ResearchSourceError('A research link did not contain enough readable page text to use.', 422);
+  try {
+    return extractResearchHtml(html, url, MAX_RESEARCH_EXCERPT_CHARS);
+  } catch (error) {
+    throw new ResearchSourceError(
+      error instanceof Error ? error.message : 'The page did not contain enough readable article text.',
+      422,
+      { stage: 'content_extraction' },
+    );
   }
-
-  return {
-    title: (title || fallbackTitle(url)).slice(0, 240),
-    excerpt: text.slice(0, MAX_RESEARCH_EXCERPT_CHARS),
-  };
 }
 
-async function readResponseText(response: Response, maxBytes: number): Promise<string> {
+async function readResponseBytes(
+  response: Response,
+  maxBytes: number,
+  tooLargeMessage: string,
+): Promise<Uint8Array> {
   const declaredSize = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredSize) && declaredSize > maxBytes) {
-    throw new ResearchSourceError('A research page is too large to import. Use a smaller article page.', 413);
+    throw new ResearchSourceError(tooLargeMessage, 413, { stage: 'content_extraction' });
   }
   if (!response.body) {
     throw new ResearchSourceError('A research page returned no readable content.', 422);
@@ -429,7 +422,7 @@ async function readResponseText(response: Response, maxBytes: number): Promise<s
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
         await reader.cancel();
-        throw new ResearchSourceError('A research page is too large to import. Use a smaller article page.', 413);
+        throw new ResearchSourceError(tooLargeMessage, 413, { stage: 'content_extraction' });
       }
       chunks.push(value);
     }
@@ -443,12 +436,21 @@ async function readResponseText(response: Response, maxBytes: number): Promise<s
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  return bytes;
+}
+
+async function readResponseText(response: Response, maxBytes: number): Promise<string> {
+  const bytes = await readResponseBytes(
+    response,
+    maxBytes,
+    'A research page is larger than the 5 MiB import limit. Use a smaller article page.',
+  );
   return new TextDecoder('utf-8').decode(bytes);
 }
 
 async function fetchResearchPage(
   initialUrl: URL,
-  config: Required<Pick<ResearchSourceLoaderConfig, 'fetchImpl' | 'resolveHost' | 'timeoutMs' | 'maxBytes'>>,
+  config: Required<Pick<ResearchSourceLoaderConfig, 'fetchImpl' | 'resolveHost' | 'timeoutMs' | 'maxBytes' | 'maxPdfBytes' | 'parsePdf'>>,
 ): Promise<{ url: URL; title: string; excerpt: string; httpStatus: number; contentType: string }> {
   let currentUrl = initialUrl;
 
@@ -460,7 +462,7 @@ async function fetchResearchPage(
       response = await config.fetchImpl(currentUrl.href, {
         method: 'GET',
         headers: {
-          Accept: 'text/html, text/plain;q=0.9',
+          Accept: 'text/html, text/plain;q=0.9, application/pdf;q=0.8',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
           'Accept-Language': 'en-US,en;q=0.9',
         },
@@ -515,6 +517,51 @@ async function fetchResearchPage(
     }
 
     const contentType = (response.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase();
+    const pdfByExtension = /\.pdf$/i.test(currentUrl.pathname);
+    const isPdf = contentType === 'application/pdf' ||
+      (pdfByExtension && (contentType === 'application/octet-stream' || !contentType));
+
+    if (isPdf) {
+      const bytes = await readResponseBytes(
+        response,
+        config.maxPdfBytes,
+        'This PDF is larger than the 5 MiB research limit. Use a smaller PDF or link to an HTML article.',
+      );
+      let parsedPdf;
+      try {
+        parsedPdf = await config.parsePdf(bytes, MAX_RESEARCH_PDF_PAGES, MAX_RESEARCH_EXCERPT_CHARS);
+      } catch {
+        throw new ResearchSourceError(
+          'The PDF could not be read. Use a valid, unlocked, text-based PDF.',
+          422,
+          { stage: 'content_extraction', httpStatus: response.status },
+        );
+      }
+      if (parsedPdf.pageCount > MAX_RESEARCH_PDF_PAGES) {
+        throw new ResearchSourceError(
+          'This PDF has more than 20 pages. Link to a shorter report or an HTML article page.',
+          413,
+          { stage: 'content_extraction', httpStatus: response.status },
+        );
+      }
+
+      const excerpt = parsedPdf.pageTexts.join('\n\n').trim();
+      if (excerpt.length < 40) {
+        throw new ResearchSourceError(
+          'This PDF does not contain enough selectable text. Scanned PDFs need OCR; use a text-based PDF or an HTML article.',
+          422,
+          { stage: 'content_extraction', httpStatus: response.status },
+        );
+      }
+      return {
+        url: currentUrl,
+        title: parsedPdf.title?.slice(0, 240) || fallbackTitle(currentUrl),
+        excerpt: excerpt.slice(0, MAX_RESEARCH_EXCERPT_CHARS),
+        httpStatus: response.status,
+        contentType: 'application/pdf',
+      };
+    }
+
     if (contentType !== 'text/html' && contentType !== 'text/plain') {
       throw new ResearchSourceError(
         'This URL returned ' + (contentType || 'an unknown content type') + ', not an HTML or plain-text article. Link directly to a public webpage.',
@@ -540,6 +587,8 @@ export async function loadResearchSourcesIndividually(
     resolveHost: options.resolveHost ?? resolveHostname,
     timeoutMs: options.timeoutMs ?? 10_000,
     maxBytes: options.maxBytes ?? MAX_RESEARCH_RESPONSE_BYTES,
+    maxPdfBytes: options.maxPdfBytes ?? MAX_RESEARCH_PDF_BYTES,
+    parsePdf: options.parsePdf ?? extractResearchPdf,
     now: options.now ?? (() => new Date()),
   };
 
@@ -639,6 +688,8 @@ export async function loadResearchSources(
     resolveHost: options.resolveHost ?? resolveHostname,
     timeoutMs: options.timeoutMs ?? 10_000,
     maxBytes: options.maxBytes ?? MAX_RESEARCH_RESPONSE_BYTES,
+    maxPdfBytes: options.maxPdfBytes ?? MAX_RESEARCH_PDF_BYTES,
+    parsePdf: options.parsePdf ?? extractResearchPdf,
     now: options.now ?? (() => new Date()),
   };
 

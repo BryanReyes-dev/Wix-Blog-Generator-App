@@ -33,7 +33,7 @@ There are two separate media paths:
 
 ## Current limits and verification
 
-- Up to five research URLs are retrieved with bounded public-page validation.
+- Up to five research URLs are retrieved live with public URL/DNS/redirect validation. HTML and plain-text responses are limited to 5 MiB; text-based PDFs are limited to 5 MiB and 20 pages. Article excerpts are capped at 6,000 characters. Scanned PDFs requiring OCR are not supported.
 - Up to four visual reference files and eight total derived frames are accepted by the workflow.
 - The editor supports headings, paragraphs, lists, quotes, dividers, and images.
 - The preview reflects article content and supported rich-text settings, not the Wix site header, footer, global theme, or exact final page template.
