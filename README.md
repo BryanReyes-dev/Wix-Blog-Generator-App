@@ -103,7 +103,7 @@ The test command runs the test runner, authorization, workflow, and UI-preview s
 ## Important behavior and limitations
 
 - Wix AI APIs may be Developer Preview; verify their current availability and behavior in the development app.
-- Research URLs are fetched and validated by the server. Webpage excerpts are treated as untrusted content, not instructions.
+- Research URLs are fetched live and validated by the server. HTML and plain-text responses are limited to 5 MiB; text-based PDFs are limited to 5 MiB and 20 pages. The server extracts a bounded article excerpt (up to 6,000 characters) rather than storing the full page. Scanned PDFs that require OCR aren't supported. Retrieved content and source notes are treated as untrusted context, not instructions.
 - Images and sampled video frames can inform AI generation. Audio and document/archive contents are not transcribed or parsed by the AI; those files are included as media or download references.
 - Uploaded article assets are public Wix Media Manager files so Blog visitors can load them. Do not upload private or sensitive files.
 - Wix processes media uploads asynchronously. Draft creation stops with a retryable message until uploaded assets are ready.
