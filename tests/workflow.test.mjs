@@ -668,6 +668,37 @@ test('research links are checked independently and successful sources survive si
   assert.deepEqual(requests.sort(), ['blocked.example.org', 'working.example.org']);
 });
 
+test('research fetch failures expose sanitized nested network diagnostics', async () => {
+  const cause = Object.assign(
+    new Error('connect ECONNRESET to https://private.example.test/article at 192.0.2.10'),
+    {
+      code: 'ECONNRESET',
+      cause: Object.assign(new Error('socket closed'), { code: 'UND_ERR_SOCKET' }),
+    },
+  );
+  const fetchFailure = new TypeError('fetch failed', { cause });
+
+  const result = await loadResearchSourcesIndividually([
+    { id: 'fetch-failure', url: 'https://public.example.org/article', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl: async () => { throw fetchFailure; },
+  });
+
+  assert.equal(result.checks[0].status, 'error');
+  assert.match(result.checks[0].message, /could not be reached because the connection failed/i);
+  assert.deepEqual(result.checks[0].diagnostic, {
+    code: 'FETCH_ECONNRESET',
+    stage: 'fetch',
+    errorName: 'TypeError',
+    errorMessage: 'fetch failed',
+    causeName: 'Error',
+    causeCode: 'ECONNRESET',
+    causeMessage: 'connect ECONNRESET to [url] at [ip]',
+  });
+  assert.doesNotMatch(JSON.stringify(result.checks[0].diagnostic), /private\.example\.test|192\.0\.2\.10/);
+});
+
 test('duplicate research URLs are reported against the later row only', async () => {
   const html = '<html><head><title>One Working Page</title></head><body><main><p>This excerpt is long enough to use as a valid research source in the duplicate check test.</p></main></body></html>';
   let requests = 0;

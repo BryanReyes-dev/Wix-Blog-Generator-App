@@ -25,12 +25,23 @@ export type ResearchSource = {
 
 export type ResearchLinkEntry = { id: string; url: string; notes: string };
 
+export type ResearchLinkDiagnostic = {
+  code: string;
+  stage: 'fetch';
+  errorName?: string;
+  errorMessage?: string;
+  causeName?: string;
+  causeCode?: string;
+  causeMessage?: string;
+};
+
 export type ResearchLinkCheck = {
   id: string;
   url: string;
   status: 'success' | 'error';
   title?: string;
   message?: string;
+  diagnostic?: ResearchLinkDiagnostic;
 };
 
 export type ResearchSourceLoadResult = {
@@ -43,8 +54,12 @@ export type ResearchCitationSource = Pick<ResearchSource, 'id' | 'title' | 'url'
 type ResearchSourceDiagnostics = {
   stage?: 'url_validation' | 'dns_lookup' | 'fetch' | 'http_response' | 'content_type' | 'content_extraction' | 'duplicate';
   httpStatus?: number;
+  diagnosticCode?: string;
+  errorName?: string;
+  errorMessage?: string;
   causeName?: string;
   causeCode?: string;
+  causeMessage?: string;
 };
 
 export class ResearchSourceError extends Error {
@@ -57,6 +72,61 @@ export class ResearchSourceError extends Error {
     this.status = status;
     this.diagnostics = diagnostics;
   }
+}
+
+function toErrorRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function sanitizeDiagnosticText(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  return value
+    .replace(/https?:\/\/[^\s"'<>]+/gi, '[url]')
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[ip]')
+    .replace(/\bBearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+function normalizeDiagnosticToken(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64) || 'UNKNOWN';
+}
+
+function describeFetchFailure(error: unknown): Pick<
+  ResearchSourceDiagnostics,
+  'diagnosticCode' | 'errorName' | 'errorMessage' | 'causeName' | 'causeCode' | 'causeMessage'
+> {
+  const root = toErrorRecord(error);
+  const causes: Record<string, unknown>[] = [];
+  let current = toErrorRecord(root?.cause);
+
+  // Fetch implementations commonly wrap the socket/TLS failure in a TypeError.
+  // Follow a short cause chain so diagnostics retain the original network code.
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    causes.push(current);
+    current = toErrorRecord(current.cause);
+  }
+
+  const codeRecord = [root, ...causes].find((record) =>
+    typeof record?.code === 'string' && /^[A-Za-z0-9_.-]{1,80}$/.test(record.code),
+  );
+  const errorName = typeof root?.name === 'string' ? root.name.slice(0, 80) : undefined;
+  const causeName = typeof causes[0]?.name === 'string' ? String(causes[0].name).slice(0, 80) : undefined;
+  const causeCode = typeof codeRecord?.code === 'string' ? codeRecord.code : undefined;
+  const codeToken = causeCode ?? causeName ?? errorName ?? 'UNKNOWN';
+
+  return {
+    diagnosticCode: 'FETCH_' + normalizeDiagnosticToken(codeToken),
+    errorName,
+    errorMessage: sanitizeDiagnosticText(root?.message),
+    causeName,
+    causeCode,
+    causeMessage: causes
+      .map((cause) => sanitizeDiagnosticText(cause.message))
+      .find((message): message is string => Boolean(message)),
+  };
 }
 
 type ResolvedAddress = { address: string; family: number };
@@ -470,9 +540,8 @@ async function fetchResearchPage(
         signal: AbortSignal.timeout(config.timeoutMs),
       });
     } catch (error) {
-      const record = error && typeof error === 'object' ? error as Record<string, unknown> : {};
-      const errorName = typeof record.name === 'string' ? record.name : '';
-      const timedOut = errorName === 'TimeoutError' || errorName === 'AbortError';
+      const fetchDiagnostics = describeFetchFailure(error);
+      const timedOut = fetchDiagnostics.errorName === 'TimeoutError' || fetchDiagnostics.errorName === 'AbortError';
       throw new ResearchSourceError(
         timedOut
           ? 'The website did not respond within ' + Math.round(config.timeoutMs / 1000) + ' seconds. Try another page or retry later.'
@@ -480,8 +549,7 @@ async function fetchResearchPage(
         422,
         {
           stage: 'fetch',
-          causeName: errorName.slice(0, 80) || undefined,
-          causeCode: typeof record.code === 'string' ? record.code.slice(0, 80) : undefined,
+          ...fetchDiagnostics,
         },
       );
     }
@@ -652,15 +720,36 @@ export async function loadResearchSourcesIndividually(
         hostname: hostname ?? getResearchHostname(link.url),
         stage: diagnostics?.stage ?? stage,
         httpStatus: diagnostics?.httpStatus ?? 'unknown',
-        errorName: diagnostics?.causeName ?? (error instanceof Error ? error.name : 'UnknownError'),
+        diagnosticCode: diagnostics?.diagnosticCode ?? 'unknown',
+        errorName: diagnostics?.errorName ?? (error instanceof Error ? error.name : 'UnknownError'),
+        errorMessage: diagnostics?.errorMessage,
         errorCode: diagnostics?.causeCode ?? 'unknown',
+        causeName: diagnostics?.causeName,
+        causeMessage: diagnostics?.causeMessage,
         status: sourceError?.status ?? 500,
         durationMs: Date.now() - startedAt,
         message,
       });
+      const diagnostic: ResearchLinkDiagnostic | undefined = diagnostics?.diagnosticCode
+        ? {
+            code: diagnostics.diagnosticCode,
+            stage: 'fetch',
+            errorName: diagnostics.errorName,
+            errorMessage: diagnostics.errorMessage,
+            causeName: diagnostics.causeName,
+            causeCode: diagnostics.causeCode,
+            causeMessage: diagnostics.causeMessage,
+          }
+        : undefined;
       return {
         source: null,
-        check: { id: link.id, url: link.url, status: 'error' as const, message },
+        check: {
+          id: link.id,
+          url: link.url,
+          status: 'error' as const,
+          message,
+          ...(diagnostic ? { diagnostic } : {}),
+        },
       };
     }
   }));
