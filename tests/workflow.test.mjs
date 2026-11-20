@@ -34,6 +34,10 @@ import {
 } from '../src/lib/server/research-sources.ts';
 import { parseMediaReferences, parseDraftMediaInputs } from '../src/lib/server/media-references.ts';
 import { ARTICLE_TEMPLATES, DEFAULT_ARTICLE_DESIGN, parseArticleDesign } from '../src/lib/article-layout.ts';
+import {
+  RESEARCH_NETWORK_DIAGNOSTICS_BUILD,
+  runResearchNetworkDiagnostics,
+} from '../src/lib/server/research-network-diagnostics.ts';
 
 const memberToken = (overrides = {}) => ({
   active: true,
@@ -808,4 +812,95 @@ test('research PDFs over the page limit are rejected per link', async () => {
 
 test('Wix AI generation is configured to wait five minutes before timing out', () => {
   assert.equal(AI_GENERATION_TIMEOUT_MS, 5 * 60 * 1_000);
+});
+
+
+test('research network diagnostics report the fixed DNS and HTTPS probes without exposing resolved addresses', async () => {
+  let resolvedHostname = '';
+  let requestedUrl = '';
+  let requestOptions;
+  const result = await runResearchNetworkDiagnostics({
+    resolveHost: async (hostname) => {
+      resolvedHostname = hostname;
+      return [
+        { address: '208.80.154.224', family: 4 },
+        { address: '2620:0:861:ed1a::1', family: 6 },
+      ];
+    },
+    fetchImpl: async (url, init) => {
+      requestedUrl = String(url);
+      requestOptions = init;
+      return new Response('<html></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    },
+  });
+
+  assert.equal(result.diagnosticBuild, RESEARCH_NETWORK_DIAGNOSTICS_BUILD);
+  assert.equal(result.target, 'www.wikipedia.org');
+  assert.equal(resolvedHostname, 'www.wikipedia.org');
+  assert.equal(requestedUrl, 'https://www.wikipedia.org/');
+  assert.equal(requestOptions.method, 'GET');
+  assert.equal(requestOptions.redirect, 'manual');
+  assert.equal(result.checks.dns.status, 'ok');
+  assert.equal(result.checks.dns.resolvedAddressCount, 2);
+  assert.equal(result.checks.https.status, 'reachable');
+  assert.equal(result.checks.https.httpStatus, 200);
+  assert.equal(result.checks.https.contentType, 'text/html');
+  assert.doesNotMatch(JSON.stringify(result), /208\.80\.154\.224|2620:0:861/);
+});
+
+test('research network diagnostics identify DNS and outbound HTTPS failures independently', async () => {
+  const dnsCause = Object.assign(
+    new Error('lookup failed for https://private.example.test at 192.0.2.10'),
+    { code: 'EAI_AGAIN' },
+  );
+  const dnsFailure = new TypeError('fetch failed', { cause: dnsCause });
+  const httpsCause = Object.assign(
+    new Error('connect ECONNRESET to https://private.example.test/article at 198.51.100.20'),
+    { code: 'ECONNRESET' },
+  );
+  const httpsFailure = new TypeError('fetch failed', { cause: httpsCause });
+
+  const result = await runResearchNetworkDiagnostics({
+    resolveHost: async () => { throw dnsFailure; },
+    fetchImpl: async () => { throw httpsFailure; },
+  });
+
+  assert.equal(result.checks.dns.status, 'error');
+  assert.equal(result.checks.dns.diagnostic.code, 'DNS_EAI_AGAIN');
+  assert.equal(result.checks.dns.diagnostic.causeCode, 'EAI_AGAIN');
+  assert.equal(result.checks.https.status, 'failed');
+  assert.equal(result.checks.https.diagnostic.code, 'FETCH_ECONNRESET');
+  const serialized = JSON.stringify(result.checks);
+  assert.doesNotMatch(serialized, /private\.example\.test|192\.0\.2\.10|198\.51\.100\.20/);
+});
+
+test('individual research-link results include sanitized DNS-stage diagnostics', async () => {
+  const dnsCause = Object.assign(
+    new Error('lookup failed for https://private.example.test/article at 203.0.113.8'),
+    { code: 'EAI_AGAIN' },
+  );
+  const result = await loadResearchSourcesIndividually([
+    { id: 'dns-failure', url: 'https://public.example.org/article', notes: '' },
+  ], {
+    resolveHost: async () => { throw new TypeError('fetch failed', { cause: dnsCause }); },
+    fetchImpl: async () => {
+      throw new Error('The page fetch should not run when DNS validation fails.');
+    },
+  });
+
+  assert.equal(result.checks[0].status, 'error');
+  assert.match(result.checks[0].message, /hostname could not be verified/i);
+  assert.deepEqual(result.checks[0].diagnostic, {
+    code: 'DNS_EAI_AGAIN',
+    stage: 'dns_lookup',
+    errorName: 'TypeError',
+    errorMessage: 'fetch failed',
+    causeName: 'Error',
+    causeCode: 'EAI_AGAIN',
+    causeMessage: 'lookup failed for [url] at [ip]',
+  });
+  assert.doesNotMatch(JSON.stringify(result.checks[0].diagnostic), /private\.example\.test|203\.0\.113\.8/);
 });
