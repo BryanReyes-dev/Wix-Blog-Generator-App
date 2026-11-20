@@ -3,7 +3,7 @@ import {
   extractResearchHtml,
   extractResearchPdf,
   type ResearchPdfParser,
-} from './research-content';
+} from './research-content.ts';
 
 export const MAX_RESEARCH_SOURCES = 5;
 export const MAX_RESEARCH_URL_LENGTH = 2_048;
