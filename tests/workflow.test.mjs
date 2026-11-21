@@ -487,7 +487,8 @@ test('research source requests use standard browser-compatible headers', async (
     ['https://public.example.org/houseplants'],
     {
       resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
-      fetchImpl: async (_url, init) => {
+      fetchImpl: async function (_url, init) {
+        assert.equal(this, globalThis);
         requestHeaders = new Headers(init?.headers);
         return new Response(html, {
           status: 200,
@@ -630,6 +631,29 @@ test('research link parsing preserves row IDs and defers URL errors to individua
   assert.deepEqual(links.map((link) => link.id), ['row-invalid', 'row-valid']);
   assert.equal(links[0].url, 'not-a-url');
   assert.equal(links[1].notes, 'Use this page.');
+});
+
+test('research source loader invokes fetch with globalThis as its receiver', async () => {
+  const html = '<html><head><title>Receiver Regression</title></head><body><main><p>This article excerpt is long enough to pass the research content extraction requirements.</p></main></body></html>';
+  let fetchReceiver;
+  const fetchImpl = async function (url, init) {
+    fetchReceiver = this;
+    return new Response(html, {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+    });
+  };
+
+  const result = await loadResearchSourcesIndividually([
+    { id: 'receiver-check', url: 'https://public.example.org/article', notes: '' },
+  ], {
+    resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
+    fetchImpl,
+  });
+
+  assert.equal(fetchReceiver, globalThis);
+  assert.equal(result.checks[0].status, 'success');
+  assert.equal(result.sources[0].title, 'Receiver Regression');
 });
 
 test('research links are checked independently and successful sources survive sibling failures', async () => {
@@ -827,7 +851,8 @@ test('research network diagnostics report the fixed DNS and HTTPS probes without
         { address: '2620:0:861:ed1a::1', family: 6 },
       ];
     },
-    fetchImpl: async (url, init) => {
+    fetchImpl: async function (url, init) {
+      assert.equal(this, globalThis);
       requestedUrl = String(url);
       requestOptions = init;
       return new Response('<html></html>', {

@@ -71,12 +71,12 @@ function describeNetworkError(error: unknown, prefix: 'DNS' | 'FETCH'): SafeNetw
   };
 }
 
-export const RESEARCH_NETWORK_DIAGNOSTICS_BUILD = 'research-network-2026-11-20-r1';
+export const RESEARCH_NETWORK_DIAGNOSTICS_BUILD = 'research-network-2026-11-21-r1';
 
 export async function runResearchNetworkDiagnostics(
   options: ResearchNetworkDiagnosticOptions = {},
 ) {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = (options.fetchImpl ?? globalThis.fetch).bind(globalThis);
   const resolveHost = options.resolveHost ?? resolveHostname;
   const timeoutMs = options.timeoutMs ?? 10_000;
 
