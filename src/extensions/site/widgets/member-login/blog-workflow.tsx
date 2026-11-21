@@ -159,7 +159,7 @@ export default function BlogWorkflow({ identity, signOut }: Props) {
 
   return (
     <div className={cx(
-      "box-border flex min-h-full w-full max-w-none min-w-0 flex-col gap-5 bg-[var(--page)] p-3 font-sans text-[var(--text)] sm:gap-6 sm:p-4 lg:p-8",
+      "box-border mx-auto flex min-h-full w-full max-w-[1200px] min-w-0 flex-col gap-5 bg-[var(--page)] p-3 font-sans text-[var(--text)] sm:gap-6 sm:p-4 lg:p-8",
       themeTokens(preferences.theme),
     )}>
       <WorkflowHeader
