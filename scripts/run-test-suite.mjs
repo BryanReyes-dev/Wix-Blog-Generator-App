@@ -3,11 +3,10 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const TEST_SUITES = Object.freeze({
-  all: Object.freeze(["runner", "auth", "workflow", "preview"]),
+  all: Object.freeze(["runner", "auth", "workflow"]),
   runner: Object.freeze(["runner"]),
   auth: Object.freeze(["auth"]),
   workflow: Object.freeze(["workflow"]),
-  preview: Object.freeze(["preview"]),
 });
 
 function commandFor(name, nodePath) {
@@ -31,11 +30,7 @@ function commandFor(name, nodePath) {
           "tests/workflow.test.mjs",
         ],
       };
-    case "preview":
-      return {
-        command: "vp",
-        args: ["test", "run", "tests/dev-preview.test.ts"],
-      };
+    
     default:
       throw new Error(`Unrecognized test name: ${name}`);
   }

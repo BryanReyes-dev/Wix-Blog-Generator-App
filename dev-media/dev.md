@@ -1,1 +1,0 @@
-This is a folder made for development documentation 

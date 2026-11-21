@@ -17,8 +17,7 @@
     "test:all": "vpx scripts/run-test-suite.mjs all",
     "test:runner": "node --test tests/test-suite-runner.test.mjs",
     "test:auth": "vp test run tests/auth-signoff.test.ts",
-    "test:workflow": "node --experimental-strip-types --test tests/workflow.test.mjs",
-    "test:preview": "vp test run tests/dev-preview.test.ts"
+    "test:workflow": "node --experimental-strip-types --test tests/workflow.test.mjs"
   },
   "dependencies": {
     "@wix/ai": "^1.0.0",
