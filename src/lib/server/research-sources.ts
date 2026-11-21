@@ -237,7 +237,7 @@ export const resolveHostname: ResolveHost = async (hostname) => {
     endpoint.searchParams.set('name', hostname);
     endpoint.searchParams.set('type', String(recordType.type));
 
-    const response = await fetch(endpoint, {
+    const response = await globalThis.fetch(endpoint, {
       headers: { Accept: 'application/dns-json' },
       cache: 'no-store',
       signal: AbortSignal.timeout(4_000),
@@ -650,7 +650,7 @@ export async function loadResearchSourcesIndividually(
   options: ResearchSourceLoaderConfig = {},
 ): Promise<ResearchSourceLoadResult> {
   const config = {
-    fetchImpl: options.fetchImpl ?? fetch,
+    fetchImpl: (options.fetchImpl ?? globalThis.fetch).bind(globalThis),
     resolveHost: options.resolveHost ?? resolveHostname,
     timeoutMs: options.timeoutMs ?? 10_000,
     maxBytes: options.maxBytes ?? MAX_RESEARCH_RESPONSE_BYTES,
@@ -775,7 +775,7 @@ export async function loadResearchSources(
   options: ResearchSourceLoaderConfig = {},
 ): Promise<ResearchSource[]> {
   const config = {
-    fetchImpl: options.fetchImpl ?? fetch,
+    fetchImpl: (options.fetchImpl ?? globalThis.fetch).bind(globalThis),
     resolveHost: options.resolveHost ?? resolveHostname,
     timeoutMs: options.timeoutMs ?? 10_000,
     maxBytes: options.maxBytes ?? MAX_RESEARCH_RESPONSE_BYTES,
