@@ -487,7 +487,8 @@ test('research source requests use standard browser-compatible headers', async (
     ['https://public.example.org/houseplants'],
     {
       resolveHost: async () => [{ address: '8.8.8.8', family: 4 }],
-      fetchImpl: async (_url, init) => {
+      fetchImpl: async function (_url, init) {
+        assert.equal(this, globalThis);
         requestHeaders = new Headers(init?.headers);
         return new Response(html, {
           status: 200,
